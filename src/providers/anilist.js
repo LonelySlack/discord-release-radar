@@ -1,4 +1,6 @@
 const config = require("../config");
+const { dayBounds, formatLocalTime } = require("../time");
+const log = require("../logger");
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
@@ -25,34 +27,26 @@ async function anilistQuery(query, variables = {}) {
 }
 
 /**
- * Upcoming airing anime windows:
- * - from (now - 15m) so we don't miss just-aired
- * - to (now + notifyMinutesBefore + poll buffer)
- *
- * We notify when airing time is within NOTIFY_MINUTES_BEFORE of now,
- * or already aired (within last 15 minutes).
+ * All anime episodes airing on the local calendar day (default MY).
+ * Sorted by air time — used for the daily digest (not 30‑min pings).
  */
-async function fetchUpcomingAnime() {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const beforeSec = config.notifyMinutesBefore * 60;
-  const windowStart = nowSec - 15 * 60;
-  const windowEnd = nowSec + beforeSec + 10 * 60; // +10m buffer for poll interval
-
+async function fetchTodayAnime() {
+  const { startSec, endSec, ymd } = dayBounds(config.timezone);
   const query = `
     query ($page: Int, $from: Int, $to: Int) {
       Page(page: $page, perPage: 50) {
-        pageInfo { hasNextPage }
+        pageInfo { hasNextPage currentPage }
         airingSchedules(airingAt_greater: $from, airingAt_lesser: $to, sort: TIME) {
           id
           episode
           airingAt
           media {
             id
-            idMal
             siteUrl
             format
             episodes
             genres
+            averageScore
             coverImage { large color }
             title { romaji english native }
             externalLinks { site url }
@@ -62,63 +56,70 @@ async function fetchUpcomingAnime() {
     }
   `;
 
-  const data = await anilistQuery(query, {
-    page: 1,
-    from: windowStart,
-    to: windowEnd,
-  });
-
-  const schedules = data?.Page?.airingSchedules || [];
   const results = [];
+  let page = 1;
+  let hasNext = true;
 
-  for (const item of schedules) {
-    const media = item.media;
-    if (!media) continue;
-
-    // Skip movies/OVA noise if you only want TV; keep TV + ONA mainly
-    const format = (media.format || "").toUpperCase();
-    if (["MUSIC", "MANGA", "NOVEL"].includes(format)) continue;
-
-    const title =
-      media.title?.english || media.title?.romaji || media.title?.native || "Unknown anime";
-    const airingAtMs = item.airingAt * 1000;
-    const minutesUntil = Math.round((airingAtMs - Date.now()) / 60000);
-
-    // Only fire when inside the notify window (or just aired)
-    if (minutesUntil > config.notifyMinutesBefore) continue;
-
-    const streamingLinks = (media.externalLinks || [])
-      .filter((l) =>
-        /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|bilibili|youtube/i.test(
-          l.site || ""
-        )
-      )
-      .map((l) => l.site);
-
-    results.push({
-      id: `anime:${item.id}`,
-      kind: "anime",
-      title,
-      subtitle: `Episode ${item.episode}${media.episodes ? ` / ${media.episodes}` : ""}`,
-      url: media.siteUrl,
-      image: media.coverImage?.large || null,
-      color: media.coverImage?.color || "#7C4DFF",
-      airingAt: airingAtMs,
-      minutesUntil,
-      genres: media.genres || [],
-      format,
-      // AniList external links as soft service hints; TMDB does hard region matching for movies/TV
-      providerHints: streamingLinks,
-      timingLabel:
-        minutesUntil > 0
-          ? `Airing in ~${minutesUntil} min`
-          : minutesUntil === 0
-            ? "Airing now"
-            : `Aired ~${Math.abs(minutesUntil)} min ago`,
+  while (hasNext && results.length < config.maxAnime) {
+    const data = await anilistQuery(query, {
+      page,
+      from: startSec,
+      to: endSec,
     });
+
+    const schedules = data?.Page?.airingSchedules || [];
+    hasNext = Boolean(data?.Page?.pageInfo?.hasNextPage);
+    page += 1;
+
+    for (const item of schedules) {
+      if (results.length >= config.maxAnime) break;
+      const media = item.media;
+      if (!media) continue;
+
+      const format = (media.format || "").toUpperCase();
+      if (["MUSIC", "MANGA", "NOVEL"].includes(format)) continue;
+
+      const title =
+        media.title?.english ||
+        media.title?.romaji ||
+        media.title?.native ||
+        "Unknown anime";
+      const airingAtMs = item.airingAt * 1000;
+      const localTime = formatLocalTime(config.timezone, airingAtMs);
+
+      const streamingLinks = (media.externalLinks || [])
+        .filter((l) =>
+          /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|bilibili|youtube/i.test(
+            l.site || ""
+          )
+        )
+        .map((l) => l.site);
+
+      results.push({
+        id: `anime:${item.id}:${ymd}`,
+        kind: "anime",
+        title,
+        subtitle: `Episode ${item.episode}${media.episodes ? ` / ${media.episodes}` : ""}`,
+        url: media.siteUrl,
+        image: media.coverImage?.large || null,
+        color: media.coverImage?.color || "#7C4DFF",
+        airingAt: airingAtMs,
+        localTime,
+        genres: media.genres || [],
+        format,
+        rating: media.averageScore
+          ? (media.averageScore / 10).toFixed(1)
+          : null,
+        providerHints: streamingLinks,
+        timingLabel: `${localTime} MYT`,
+      });
+    }
+
+    if (!schedules.length) break;
   }
 
+  log.info("anilist today", { ymd, count: results.length });
   return results;
 }
 
-module.exports = { fetchUpcomingAnime };
+module.exports = { fetchTodayAnime };

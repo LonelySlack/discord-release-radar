@@ -1,27 +1,35 @@
 const cron = require("node-cron");
 const config = require("./config");
-const { alreadyNotified, markNotified } = require("./db");
-const { sendRelease } = require("./notifier");
-const { fetchUpcomingAnime } = require("./providers/anilist");
+const log = require("./logger");
+const {
+  digestAlreadySent,
+  markDigestSent,
+  logPoll,
+  getRecentPolls,
+} = require("./db");
+const { sendDailyDigest, sendWeeklyOpsSummary } = require("./notifier");
+const { fetchTodayAnime } = require("./providers/anilist");
 const {
   fetchNewMovies,
   fetchAiringTv,
   fetchRecentlyAvailable,
 } = require("./providers/tmdb");
+const { localYmd, digestSlot } = require("./time");
 
 let running = false;
 
-async function collectReleases() {
+async function collectToday() {
   const types = new Set(config.contentTypes.map((t) => t.toLowerCase()));
+  const counts = { anime: 0, movies: 0, tv: 0 };
   const all = [];
 
   if (types.has("anime")) {
     try {
-      const anime = await fetchUpcomingAnime();
+      const anime = await fetchTodayAnime();
+      counts.anime = anime.length;
       all.push(...anime);
-      console.log(`[poll] anime: ${anime.length} in notify window`);
     } catch (err) {
-      console.error("[poll] AniList error:", err.message);
+      log.error("AniList fetch failed", err);
     }
   }
 
@@ -29,83 +37,158 @@ async function collectReleases() {
     try {
       const movies = await fetchNewMovies();
       const recent = await fetchRecentlyAvailable();
+      counts.movies = movies.length + recent.length;
       all.push(...movies, ...recent);
-      console.log(
-        `[poll] movies: ${movies.length} today, ${recent.length} recent`
-      );
     } catch (err) {
-      console.error("[poll] TMDB movies error:", err.message);
+      log.error("TMDB movies fetch failed", err);
     }
   }
 
   if (types.has("tv")) {
     try {
       const tv = await fetchAiringTv();
+      counts.tv = tv.length;
       all.push(...tv);
-      console.log(`[poll] tv: ${tv.length} airing today on your services`);
     } catch (err) {
-      console.error("[poll] TMDB TV error:", err.message);
+      log.error("TMDB TV fetch failed", err);
     }
   }
 
-  return all;
+  return { all, counts };
 }
 
-async function pollOnce(client) {
+/**
+ * Post a digest for the current (or forced) slot: morning | evening.
+ * Twice daily by default (09:00 + 20:00 MY) — each slot once per day.
+ */
+async function runDailyDigest(client, opts = {}) {
   if (running) {
-    console.log("[poll] skipped (previous still running)");
+    log.warn("digest skipped (previous still running)");
     return;
   }
   running = true;
 
+  const ymd = localYmd(config.timezone);
+  const hours =
+    config.digestHours?.length > 0 ? config.digestHours : [9, 20];
+  const slot = opts.slot || digestSlot(config.timezone, hours);
+  let counts = { anime: 0, movies: 0, tv: 0 };
+
   try {
-    const channel = await client.channels.fetch(config.channelId);
-    if (!channel || !channel.isTextBased()) {
-      console.error("[poll] DISCORD_CHANNEL_ID is not a text channel");
+    if (!opts.force && digestAlreadySent(ymd, slot)) {
+      log.info("digest already sent for slot", { ymd, slot });
+      logPoll({
+        ymd,
+        ...counts,
+        sent: false,
+        error: `already_sent:${slot}`,
+      });
+      log.pollResult({ ymd, slot, skipped: true, reason: "already_sent" });
       return;
     }
 
-    const releases = await collectReleases();
-    let sent = 0;
-
-    for (const item of releases) {
-      if (alreadyNotified(item.id)) continue;
-      const claimed = markNotified(item.id, item.kind, item.title);
-      if (!claimed) continue;
-
-      try {
-        await sendRelease(channel, item);
-        sent += 1;
-        // Avoid Discord rate limits
-        await new Promise((r) => setTimeout(r, 800));
-      } catch (err) {
-        console.error(`[poll] failed to send ${item.id}:`, err.message);
-      }
+    const channel = await client.channels.fetch(config.channelId);
+    if (!channel || !channel.isTextBased()) {
+      const errorMsg = "DISCORD_CHANNEL_ID is not a text channel";
+      log.error(errorMsg);
+      logPoll({ ymd, ...counts, sent: false, error: errorMsg });
+      return;
     }
 
-    console.log(`[poll] done — candidates=${releases.length} sent=${sent}`);
+    const collected = await collectToday();
+    counts = collected.counts;
+    const releases = collected.all;
+
+    await sendDailyDigest(channel, releases, ymd, slot);
+    markDigestSent(
+      ymd,
+      slot,
+      `${slot} digest ${ymd} (${releases.length} items)`
+    );
+
+    log.pollResult({
+      ymd,
+      slot,
+      sent: true,
+      itemCount: releases.length,
+      ...counts,
+    });
+    logPoll({ ymd, ...counts, sent: true, error: null });
   } catch (err) {
-    console.error("[poll] fatal:", err);
+    const errorMsg = err.message || String(err);
+    log.error("digest fatal", err);
+    logPoll({ ymd, ...counts, sent: false, error: errorMsg });
   } finally {
     running = false;
   }
 }
 
-function startScheduler(client) {
-  if (!cron.validate(config.pollCron)) {
-    throw new Error(`Invalid POLL_CRON: ${config.pollCron}`);
+async function runWeeklySummary(client) {
+  try {
+    const channel = await client.channels.fetch(config.channelId);
+    if (!channel || !channel.isTextBased()) return;
+
+    const polls = getRecentPolls(14);
+    const lines = polls.map((p) => {
+      const flag = p.error ? `⚠️ ${p.error}` : p.sent ? "✅ sent" : "· skip";
+      return `• **${p.ymd}** — anime ${p.anime} · movies ${p.movies} · tv ${p.tv} — ${flag}`;
+    });
+
+    const body = [
+      log.formatWeekSummary(),
+      "",
+      "**Recent digests**",
+      ...(lines.length ? lines : ["_No poll history yet._"]),
+      "",
+      `_Detailed logs: \`${config.weeklyLogDir}\`_`,
+    ].join("\n");
+
+    await sendWeeklyOpsSummary(channel, body);
+    log.info("weekly ops summary posted");
+  } catch (err) {
+    log.error("weekly summary failed", err);
   }
-
-  console.log(
-    `[scheduler] cron="${config.pollCron}" notifyBefore=${config.notifyMinutesBefore}m region=${config.primaryRegion}`
-  );
-
-  // First poll shortly after boot (gives Discord ready time)
-  setTimeout(() => pollOnce(client), 5000);
-
-  cron.schedule(config.pollCron, () => {
-    pollOnce(client);
-  });
 }
 
-module.exports = { startScheduler, pollOnce };
+function startScheduler(client) {
+  if (!cron.validate(config.digestCron)) {
+    throw new Error(`Invalid DIGEST_CRON: ${config.digestCron}`);
+  }
+
+  log.info("scheduler start", {
+    digestCron: config.digestCron,
+    digestHours: config.digestHours,
+    timezone: config.timezone,
+    weeklySummaryCron: config.weeklySummaryCron,
+    postWeeklySummary: config.postWeeklySummary,
+    region: config.primaryRegion,
+    mode: "twice-daily digest",
+  });
+
+  // Catch up current slot after boot if not yet posted
+  setTimeout(() => {
+    runDailyDigest(client).catch((err) => log.error("boot digest", err));
+  }, 8000);
+
+  cron.schedule(
+    config.digestCron,
+    () => {
+      runDailyDigest(client).catch((err) => log.error("cron digest", err));
+    },
+    { timezone: config.timezone }
+  );
+
+  if (config.postWeeklySummary && cron.validate(config.weeklySummaryCron)) {
+    cron.schedule(
+      config.weeklySummaryCron,
+      () => {
+        runWeeklySummary(client).catch((err) =>
+          log.error("cron weekly", err)
+        );
+      },
+      { timezone: config.timezone }
+    );
+  }
+}
+
+module.exports = { startScheduler, runDailyDigest, runWeeklySummary };

@@ -1,5 +1,7 @@
 const config = require("../config");
 const { formatAvailability } = require("../utils/matchServices");
+const { localYmd } = require("../time");
+const log = require("../logger");
 
 const BASE = "https://api.themoviedb.org/3";
 
@@ -19,7 +21,6 @@ async function tmdb(path, params = {}) {
 }
 
 function providerNamesFromResults(watchProvidersPayload) {
-  // flatrate + free + ads = "subscription-ish"; skip pure rent/buy for radar
   const buckets = ["flatrate", "free", "ads"];
   const names = new Set();
   for (const key of buckets) {
@@ -31,7 +32,6 @@ function providerNamesFromResults(watchProvidersPayload) {
 }
 
 async function fetchWatchProviders(mediaType, id) {
-  // mediaType: movie | tv
   const data = await tmdb(`/${mediaType}/${id}/watch/providers`);
   const results = data.results || {};
   const byRegion = {};
@@ -43,33 +43,27 @@ async function fetchWatchProviders(mediaType, id) {
 
   for (const region of regions) {
     const entry = results[region];
-    if (entry) {
-      byRegion[region] = providerNamesFromResults(entry);
-    } else {
-      byRegion[region] = [];
-    }
+    byRegion[region] = entry ? providerNamesFromResults(entry) : [];
   }
 
   return byRegion;
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+function todayLocal() {
+  return localYmd(config.timezone);
 }
 
-function daysFromNowISO(days) {
+function daysAgoLocal(days) {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - days);
+  return localYmd(config.timezone, d);
 }
 
 /**
- * Movies released "today" (UTC) that appear on discovery with release date.
- * TMDB rarely has exact hour — we notify on the day data is available.
+ * Movies with primary release date = local today, on your services.
  */
 async function fetchNewMovies() {
-  const today = todayISO();
-  // Discover movies with primary release date = today, sorted by popularity
+  const today = todayLocal();
   const data = await tmdb("/discover/movie", {
     "primary_release_date.gte": today,
     "primary_release_date.lte": today,
@@ -81,8 +75,7 @@ async function fetchNewMovies() {
   const items = data.results || [];
   const out = [];
 
-  // Cap to keep droplet light
-  for (const movie of items.slice(0, 15)) {
+  for (const movie of items.slice(0, config.maxMovies)) {
     const byRegion = await fetchWatchProviders("movie", movie.id);
     const availability = formatAvailability(
       byRegion,
@@ -91,7 +84,6 @@ async function fetchNewMovies() {
       config.services
     );
 
-    // Only notify if it hits at least one of the user's services somewhere
     if (!availability.hasAny) continue;
 
     out.push({
@@ -107,21 +99,21 @@ async function fetchNewMovies() {
       overview: movie.overview || "",
       rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
       availability,
-      timingLabel: "Released today (catalog date)",
+      timingLabel: "Released today",
     });
 
-    // Small delay to be nice to TMDB free tier
     await sleep(120);
   }
 
+  log.info("tmdb movies today", { today, count: out.length });
   return out;
 }
 
 /**
- * TV: episodes airing today (via /tv/airing_today) filtered by your services.
- * Exact episode clock times are not always present — notify when listed for today.
+ * TV airing today (TMDB list), filtered to your services.
  */
 async function fetchAiringTv() {
+  const today = todayLocal();
   const data = await tmdb("/tv/airing_today", {
     page: 1,
     language: "en-US",
@@ -129,9 +121,8 @@ async function fetchAiringTv() {
 
   const items = data.results || [];
   const out = [];
-  const today = todayISO();
 
-  for (const show of items.slice(0, 15)) {
+  for (const show of items.slice(0, config.maxTv)) {
     const byRegion = await fetchWatchProviders("tv", show.id);
     const availability = formatAvailability(
       byRegion,
@@ -155,36 +146,34 @@ async function fetchAiringTv() {
       overview: show.overview || "",
       rating: show.vote_average ? show.vote_average.toFixed(1) : null,
       availability,
-      timingLabel: "On today's airing list",
+      timingLabel: "Airing today",
     });
 
     await sleep(120);
   }
 
+  log.info("tmdb tv today", { today, count: out.length });
   return out;
 }
 
 /**
- * Newly available streaming titles are hard without JustWatch paid API.
- * Heuristic: popular titles first aired / released in the last 3 days
- * that are on your services in MY or fallback regions.
+ * Recent movies (last 2 local days, not today) still useful for a morning digest.
  */
 async function fetchRecentlyAvailable() {
-  const gte = daysFromNowISO(-3);
-  const lte = todayISO();
+  const today = todayLocal();
+  const gte = daysAgoLocal(2);
 
   const movieData = await tmdb("/discover/movie", {
     "primary_release_date.gte": gte,
-    "primary_release_date.lte": lte,
+    "primary_release_date.lte": today,
     sort_by: "popularity.desc",
     include_adult: "false",
     page: 1,
   });
 
   const out = [];
-  for (const movie of (movieData.results || []).slice(0, 10)) {
-    // Skip pure "today" which fetchNewMovies already covers
-    if (movie.release_date === lte) continue;
+  for (const movie of (movieData.results || []).slice(0, 8)) {
+    if (movie.release_date === today) continue;
 
     const byRegion = await fetchWatchProviders("movie", movie.id);
     const availability = formatAvailability(
@@ -196,7 +185,7 @@ async function fetchRecentlyAvailable() {
     if (!availability.hasAny) continue;
 
     out.push({
-      id: `movie-recent:${movie.id}:${movie.release_date || lte}`,
+      id: `movie-recent:${movie.id}:${movie.release_date || today}`,
       kind: "movie",
       title: movie.title || movie.original_title || "Untitled movie",
       subtitle: movie.release_date
@@ -210,11 +199,12 @@ async function fetchRecentlyAvailable() {
       overview: movie.overview || "",
       rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
       availability,
-      timingLabel: "Recent theatrical / catalog release",
+      timingLabel: "Recent release",
     });
     await sleep(120);
   }
 
+  log.info("tmdb movies recent", { gte, today, count: out.length });
   return out;
 }
 

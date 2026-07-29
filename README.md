@@ -1,10 +1,12 @@
 # Discord Release Radar
 
-Lightweight **Node.js** Discord bot that posts into **one `#releases` channel** when:
+Lightweight **Node.js** Discord bot that posts **one daily digest** into **`#releases`**:
 
-- 🎌 **Anime** episodes are about to air (~30 minutes before, via AniList schedule)
-- 🎬 **Movies** release / show up on your streaming services (TMDB)
-- 📺 **TV** shows air today on your services (TMDB)
+- 🎌 **Anime** airing **today** (AniList schedule, local MY times)
+- 🎬 **Movies** released today / recent on your streaming services (TMDB)
+- 📺 **TV** airing today on your services (TMDB)
+
+Also keeps **weekly ops logs** (errors + poll history) under `~/logs/release-radar-weekly/`, with an optional Sunday Discord summary.
 
 ### Why Node.js (not Python)?
 
@@ -72,8 +74,9 @@ DISCORD_CHANNEL_ID=...
 TMDB_API_KEY=...
 PRIMARY_REGION=MY
 FALLBACK_REGIONS=SG,US,JP,GB,ID,TH,PH
-NOTIFY_MINUTES_BEFORE=30
-POLL_CRON=*/10 * * * *
+TIMEZONE=Asia/Kuala_Lumpur
+DIGEST_CRON=0 9 * * *
+POST_WEEKLY_SUMMARY=true
 ```
 
 ---
@@ -99,16 +102,17 @@ npm install --omit=dev
 nano .env   # paste production secrets
 mkdir -p data
 
-pm2 start src/index.js --name release-radar
-pm2 save
-pm2 startup   # follow the command it prints
+# On this server we use systemd (user lonelyslack), not pm2:
+# systemctl --user enable --now release-radar.service
 ```
 
-Useful:
+Useful on this droplet:
 
 ```bash
-pm2 logs release-radar
-pm2 restart release-radar
+systemctl --user status release-radar
+tail -f ~/logs/release-radar.log
+ls ~/logs/release-radar-weekly/
+systemctl --user restart release-radar
 ```
 
 **Security:** never commit `.env`. Prefer a firewall that only allows SSH. The bot only **outbound** HTTPS to Discord / AniList / TMDB — no inbound ports required.

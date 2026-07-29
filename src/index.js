@@ -1,31 +1,36 @@
 const { Client, GatewayIntentBits, Events, ActivityType } = require("discord.js");
 const config = require("./config");
+const log = require("./logger");
 const { startScheduler } = require("./scheduler");
+
+log.initLogger(config.weeklyLogDir);
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
 client.once(Events.ClientReady, (c) => {
-  console.log(`Logged in as ${c.user.tag}`);
-  console.log(`Posting to channel ${config.channelId}`);
-  console.log(
-    `Primary region: ${config.primaryRegion} | Fallbacks: ${config.fallbackRegions.join(", ")}`
-  );
+  log.info("logged in", {
+    user: c.user.tag,
+    channelId: config.channelId,
+    primaryRegion: config.primaryRegion,
+    timezone: config.timezone,
+    digestCron: config.digestCron,
+  });
 
-  c.user.setActivity("new releases · MY", { type: ActivityType.Watching });
+  c.user.setActivity("today's releases · MY", { type: ActivityType.Watching });
   startScheduler(client);
 });
 
 client.on(Events.Error, (err) => {
-  console.error("Discord client error:", err);
+  log.error("Discord client error", err);
 });
 
 process.on("unhandledRejection", (err) => {
-  console.error("Unhandled rejection:", err);
+  log.error("Unhandled rejection", err instanceof Error ? err : new Error(String(err)));
 });
 
 client.login(config.discordToken).catch((err) => {
-  console.error("Login failed:", err.message);
+  log.error("Login failed", err);
   process.exit(1);
 });
