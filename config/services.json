@@ -1,0 +1,17 @@
+{
+  "comment": "Names matched against TMDB / AniList watch providers (case-insensitive partial match).",
+  "services": [
+    { "id": "netflix", "label": "Netflix", "match": ["Netflix"] },
+    { "id": "disney", "label": "Disney+", "match": ["Disney Plus", "Disney+"] },
+    { "id": "prime", "label": "Prime Video", "match": ["Amazon Prime Video", "Prime Video"] },
+    { "id": "hbo", "label": "HBO Max", "match": ["Max", "HBO Max", "HBO"] },
+    { "id": "viu", "label": "Viu Premium", "match": ["Viu"] },
+    { "id": "iqiyi", "label": "iQIYI", "match": ["iQIYI", "iQiyi", "Iqiyi"] },
+    { "id": "crunchyroll", "label": "Crunchyroll", "match": ["Crunchyroll"] },
+    { "id": "sun_nxt", "label": "Sun NXT", "match": ["Sun NXT", "SunNXT"] },
+    { "id": "bein", "label": "beIN SPORTS CONNECT", "match": ["beIN", "beIN SPORTS"] },
+    { "id": "astro", "label": "Astro GO+", "match": ["Astro"] },
+    { "id": "apple", "label": "Apple TV+", "match": ["Apple TV"] },
+    { "id": "youtube", "label": "YouTube", "match": ["YouTube"] }
+  ]
+}
