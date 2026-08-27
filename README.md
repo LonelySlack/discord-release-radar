@@ -2,9 +2,12 @@
 
 Lightweight **Node.js** Discord bot that posts **one daily digest** into **`#releases`**:
 
-- 🎌 **Anime** airing **today** (AniList schedule, local MY times)
+- 🎌 **Anime** airing **today and tomorrow** (AniList schedule, local MY times) — shows both the English **and** Japanese/native title, e.g. `Frieren 「葬送のフリーレン」`
 - 🎬 **Movies** released today / recent on your streaming services (TMDB)
 - 📺 **TV** airing today on your services (TMDB)
+- 🎟️ **Coming to cinemas** — upcoming theatrical releases in your region (TMDB), e.g. *Spider-Man: Brand New Day*
+- 🎮 **Game releases** — recent + upcoming games. Works with **no API key** via Steam's public storefront (PC titles); add an optional free RAWG key for cross-platform coverage
+- 🗂️ **Filter buttons** under each digest — tap **Anime / Movies / TV / Cinema / Games** to get a private (ephemeral) view of just that category, so the board never feels cluttered
 
 Also keeps **weekly ops logs** (errors + poll history) under `~/logs/release-radar-weekly/`, with an optional Sunday Discord summary.
 
@@ -56,6 +59,18 @@ For a **24/7 notifier on a small DigitalOcean droplet**, Node is a bit leaner an
 
 AniList needs **no key**.
 
+### 3b. Games source (no key needed)
+
+The **Games** section works out of the box with **no key** using Steam's public
+storefront API (PC titles only). Nothing to configure.
+
+Want cross-platform coverage (consoles too) with cleaner curation? Get a free
+key at [rawg.io](https://rawg.io/apidocs) and set `RAWG_API_KEY=...` in `.env` —
+the bot auto-switches to RAWG when a key is present. Force a source explicitly
+with `GAME_SOURCE=steam` or `GAME_SOURCE=rawg`.
+
+> The filter buttons work out of the box; they need **no extra Discord intents** (button clicks are delivered regardless).
+
 ### 4. Install & configure
 
 ```bash
@@ -63,8 +78,13 @@ cd C:\Users\aqil2\projects\discord-release-radar
 copy .env.example .env
 # edit .env with notepad — fill DISCORD_TOKEN, DISCORD_CHANNEL_ID, TMDB_API_KEY
 npm install
-npm start
+npm run preview   # print the digest to your terminal — no Discord, nothing posted
+npm start         # run the bot for real (connects + posts on schedule)
 ```
+
+> **Node 20+** required (better-sqlite3 ships prebuilt binaries — no compiler needed
+> on Node 20/22/24). `npm run preview` is the safe way to see output on your PC
+> before pointing it at your server.
 
 `.env` essentials:
 
@@ -131,9 +151,14 @@ discord-release-radar/
 │   ├── db.js
 │   ├── notifier.js        # Discord embeds
 │   ├── scheduler.js       # cron poll loop
+│   ├── interactions.js    # filter buttons → ephemeral filtered view
+│   ├── digestStore.js     # remembers posted digests so buttons can re-render
 │   ├── providers/
-│   │   ├── anilist.js     # anime airing schedule
-│   │   └── tmdb.js        # movies + TV + watch regions
+│   │   ├── anilist.js     # anime airing schedule (today + tomorrow, JP names)
+│   │   ├── tmdb.js        # movies + TV + upcoming cinema + watch regions
+│   │   ├── games.js       # dispatcher: picks steam (no key) or rawg
+│   │   ├── steam.js       # game releases via Steam public API (no key)
+│   │   └── rawg.js        # game releases (optional RAWG key)
 │   └── utils/matchServices.js
 ├── .env.example
 └── package.json
@@ -148,6 +173,56 @@ discord-release-radar/
 3. **Anime** has the best “30 minutes before” timing. **Movies/TV** usually only have a **date**, not a precise clock — we notify when the data appears.
 4. Niche apps (Astro GO+, Sun NXT Lite, beIN) may have **incomplete** TMDB provider mapping — edit `config/services.json` match strings over time.
 5. Keep the droplet light: default poll is every **10 minutes**, capped TMDB pages, SQLite on disk.
+
+---
+
+## Troubleshooting
+
+### `npm install` fails building `better-sqlite3` (`gyp ERR!`, "Could not find any Visual Studio installation")
+
+This means your **Node version is newer than the prebuilt binaries** shipped by the
+installed `better-sqlite3`, so npm falls back to compiling from source (which needs
+build tools you may not have — Visual Studio on Windows, `build-essential` on Linux).
+
+**Fix — bump `better-sqlite3` to a version that has a prebuilt binary for your Node:**
+
+```bash
+node -v                              # note your Node major version (e.g. v24)
+npm install better-sqlite3@latest    # pulls the newest release + its prebuilt binaries
+npm install                          # reinstall the rest
+```
+
+Then verify it loads without a compiler:
+
+```bash
+node -e "new (require('better-sqlite3'))(':memory:'); console.log('sqlite OK')"
+```
+
+If `@latest` still compiles, either wait for a release that supports your Node, or
+drop to an **LTS Node** (e.g. 20 or 22) which prebuilts always cover — e.g. with
+`nvm install 22 && nvm use 22`.
+
+> History: this project was originally pinned to `better-sqlite3@^11`, which had no
+> Node 24 binary. Bumping to `^13` fixed it. The same move fixes the next Node jump.
+
+### Games section is empty / low quality
+
+- **Empty:** with `GAME_SOURCE=rawg` but no `RAWG_API_KEY`, it falls back to Steam;
+  if Steam is unreachable you'll see it logged. Check network/logs.
+- **Low quality (shovelware):** the keyless Steam source only sees Steam's front-page
+  lists (PC only). For cleaner, cross-platform results add a free `RAWG_API_KEY`.
+
+### Filter buttons say "this digest expired"
+
+The buttons hold their data **in memory**, so a bot restart clears older digests'
+buttons. This is expected — the **next** posted digest's buttons work normally.
+
+### Nothing posts, no errors
+
+Check that `DISCORD_CHANNEL_ID` is a **text channel** the bot can see and send to
+(needs `View Channel`, `Send Messages`, `Embed Links`), and that a digest for the
+current slot wasn't already sent (dedupe is per `YYYY-MM-DD:slot`). Use
+`npm run preview` to confirm the data pipeline independently of Discord.
 
 ---
 

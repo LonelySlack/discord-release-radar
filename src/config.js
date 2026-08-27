@@ -33,6 +33,9 @@ const config = {
   discordToken: required("DISCORD_TOKEN"),
   channelId: required("DISCORD_CHANNEL_ID"),
   tmdbApiKey: required("TMDB_API_KEY"),
+  // Optional: free key from https://rawg.io/apidocs. Not required — without it
+  // the games section falls back to Steam's public API (no key needed).
+  rawgApiKey: (process.env.RAWG_API_KEY || "").trim().replace(/^your_.*/, ""),
   primaryRegion: (process.env.PRIMARY_REGION || "MY").toUpperCase(),
   fallbackRegions: list("FALLBACK_REGIONS", "SG,US,JP,GB,ID,TH,PH").map((r) =>
     r.toUpperCase()
@@ -68,7 +71,22 @@ const config = {
   postWeeklySummary:
     String(process.env.POST_WEEKLY_SUMMARY || "true").toLowerCase() !== "false",
 
-  contentTypes: list("CONTENT_TYPES", "anime,movie,tv"),
+  contentTypes: list("CONTENT_TYPES", "anime,movie,tv,cinema,game"),
+
+  /**
+   * Where game releases come from: "steam" (no key) or "rawg" (needs key).
+   * Default: rawg if a key is set, otherwise steam.
+   */
+  gameSource: (
+    process.env.GAME_SOURCE ||
+    ((process.env.RAWG_API_KEY || "").trim().replace(/^your_.*/, "")
+      ? "rawg"
+      : "steam")
+  ).toLowerCase(),
+
+  /** How many days ahead to look for cinema / game releases. */
+  cinemaWindowDays: Number(process.env.CINEMA_WINDOW_DAYS || 45),
+  gameWindowDays: Number(process.env.GAME_WINDOW_DAYS || 30),
   services: servicesConfig.services,
   dataDir,
   dbPath: path.join(dataDir, "radar.db"),
@@ -78,6 +96,8 @@ const config = {
   maxAnime: Number(process.env.MAX_ANIME || 25),
   maxMovies: Number(process.env.MAX_MOVIES || 12),
   maxTv: Number(process.env.MAX_TV || 15),
+  maxCinema: Number(process.env.MAX_CINEMA || 10),
+  maxGames: Number(process.env.MAX_GAMES || 12),
 };
 
 module.exports = config;

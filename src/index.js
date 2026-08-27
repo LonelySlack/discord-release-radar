@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Events, ActivityType } = require("discord.js"
 const config = require("./config");
 const log = require("./logger");
 const { startScheduler } = require("./scheduler");
+const { registerInteractions } = require("./interactions");
 
 log.initLogger(config.weeklyLogDir);
 
@@ -19,6 +20,7 @@ client.once(Events.ClientReady, (c) => {
   });
 
   c.user.setActivity("today's releases · MY", { type: ActivityType.Watching });
+  registerInteractions(client);
   startScheduler(client);
 });
 

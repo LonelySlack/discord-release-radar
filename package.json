@@ -6,16 +6,23 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "preview": "node scripts/preview.js"
   },
-  "keywords": ["discord", "anime", "movies", "tv", "notifications"],
+  "keywords": [
+    "discord",
+    "anime",
+    "movies",
+    "tv",
+    "notifications"
+  ],
   "author": "",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.0.3",
     "discord.js": "^14.21.0",
     "dotenv": "^16.6.1",
     "node-cron": "^4.2.1"

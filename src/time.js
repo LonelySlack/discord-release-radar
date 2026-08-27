@@ -3,6 +3,11 @@
  * Asia/Kuala_Lumpur has no DST (fixed UTC+8) — we still use Intl for labels.
  */
 
+/** New Date shifted by n whole days (UTC-safe; day boundaries resolved later per-zone). */
+function addDays(n, date = new Date()) {
+  return new Date(date.getTime() + n * 24 * 60 * 60 * 1000);
+}
+
 function localYmd(timeZone, date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -136,6 +141,7 @@ function isoWeekKey(date = new Date()) {
 }
 
 module.exports = {
+  addDays,
   localYmd,
   localParts,
   dayBounds,

@@ -8,26 +8,33 @@ const {
   getRecentPolls,
 } = require("./db");
 const { sendDailyDigest, sendWeeklyOpsSummary } = require("./notifier");
-const { fetchTodayAnime } = require("./providers/anilist");
+const { remember } = require("./digestStore");
+const { fetchTodayAnime, fetchTomorrowAnime } = require("./providers/anilist");
 const {
   fetchNewMovies,
   fetchAiringTv,
   fetchRecentlyAvailable,
+  fetchUpcomingCinema,
 } = require("./providers/tmdb");
+const { fetchGameReleases } = require("./providers/games");
 const { localYmd, digestSlot } = require("./time");
 
 let running = false;
 
 async function collectToday() {
   const types = new Set(config.contentTypes.map((t) => t.toLowerCase()));
-  const counts = { anime: 0, movies: 0, tv: 0 };
+  const counts = { anime: 0, movies: 0, tv: 0, cinema: 0, games: 0 };
   const all = [];
 
   if (types.has("anime")) {
     try {
-      const anime = await fetchTodayAnime();
-      counts.anime = anime.length;
-      all.push(...anime);
+      // Today + tomorrow so you can see what's coming up next, not only today.
+      const [today, tomorrow] = await Promise.all([
+        fetchTodayAnime(),
+        fetchTomorrowAnime(),
+      ]);
+      counts.anime = today.length + tomorrow.length;
+      all.push(...today, ...tomorrow);
     } catch (err) {
       log.error("AniList fetch failed", err);
     }
@@ -54,6 +61,26 @@ async function collectToday() {
     }
   }
 
+  if (types.has("cinema")) {
+    try {
+      const cinema = await fetchUpcomingCinema();
+      counts.cinema = cinema.length;
+      all.push(...cinema);
+    } catch (err) {
+      log.error("TMDB cinema fetch failed", err);
+    }
+  }
+
+  if (types.has("game")) {
+    try {
+      const games = await fetchGameReleases();
+      counts.games = games.length;
+      all.push(...games);
+    } catch (err) {
+      log.error("RAWG games fetch failed", err);
+    }
+  }
+
   return { all, counts };
 }
 
@@ -72,7 +99,7 @@ async function runDailyDigest(client, opts = {}) {
   const hours =
     config.digestHours?.length > 0 ? config.digestHours : [9, 20];
   const slot = opts.slot || digestSlot(config.timezone, hours);
-  let counts = { anime: 0, movies: 0, tv: 0 };
+  let counts = { anime: 0, movies: 0, tv: 0, cinema: 0, games: 0 };
 
   try {
     if (!opts.force && digestAlreadySent(ymd, slot)) {
@@ -99,7 +126,11 @@ async function runDailyDigest(client, opts = {}) {
     counts = collected.counts;
     const releases = collected.all;
 
-    await sendDailyDigest(channel, releases, ymd, slot);
+    const message = await sendDailyDigest(channel, releases, ymd, slot);
+    if (message?.id) {
+      // Remember the data so the filter buttons on this message can re-render it.
+      remember(message.id, { releases, ymd, slot });
+    }
     markDigestSent(
       ymd,
       slot,
@@ -191,4 +222,9 @@ function startScheduler(client) {
   }
 }
 
-module.exports = { startScheduler, runDailyDigest, runWeeklySummary };
+module.exports = {
+  startScheduler,
+  runDailyDigest,
+  runWeeklySummary,
+  collectToday,
+};

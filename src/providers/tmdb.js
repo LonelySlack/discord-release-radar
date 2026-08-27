@@ -208,6 +208,59 @@ async function fetchRecentlyAvailable() {
   return out;
 }
 
+/**
+ * Movies coming to CINEMAS soon in the primary region (theatrical, not streaming).
+ * e.g. "Spider-Man: Brand New Day", "The Odyssey". No watch-provider filter —
+ * these aren't on your subscriptions yet, the point is the theatrical date.
+ */
+async function fetchUpcomingCinema() {
+  const today = todayLocal();
+  const until = daysFromNowLocal(config.cinemaWindowDays);
+
+  // discover with a theatrical release-type filter, scoped to the region so the
+  // dates reflect the local cinema calendar.
+  const data = await tmdb("/discover/movie", {
+    region: config.primaryRegion,
+    "primary_release_date.gte": today,
+    "primary_release_date.lte": until,
+    with_release_type: "3|2", // 3 = theatrical, 2 = limited theatrical
+    sort_by: "popularity.desc",
+    include_adult: "false",
+    page: 1,
+  });
+
+  const items = data.results || [];
+  const out = [];
+
+  for (const movie of items.slice(0, config.maxCinema)) {
+    const date = movie.release_date || null;
+    out.push({
+      id: `cinema:${movie.id}:${date || until}`,
+      kind: "cinema",
+      title: movie.title || movie.original_title || "Untitled film",
+      subtitle: date ? `In cinemas ${date}` : "Coming to cinemas",
+      url: `https://www.themoviedb.org/movie/${movie.id}`,
+      image: movie.poster_path
+        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+        : null,
+      color: "#FFB300",
+      overview: movie.overview || "",
+      rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
+      releaseDate: date,
+      timingLabel: date ? `🎟️ ${date}` : "Coming soon",
+    });
+  }
+
+  log.info("tmdb cinema upcoming", { today, until, count: out.length });
+  return out;
+}
+
+function daysFromNowLocal(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return localYmd(config.timezone, d);
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -216,4 +269,5 @@ module.exports = {
   fetchNewMovies,
   fetchAiringTv,
   fetchRecentlyAvailable,
+  fetchUpcomingCinema,
 };

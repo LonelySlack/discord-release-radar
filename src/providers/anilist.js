@@ -1,5 +1,5 @@
 const config = require("../config");
-const { dayBounds, formatLocalTime } = require("../time");
+const { dayBounds, formatLocalTime, addDays } = require("../time");
 const log = require("../logger");
 
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -27,11 +27,36 @@ async function anilistQuery(query, variables = {}) {
 }
 
 /**
- * All anime episodes airing on the local calendar day (default MY).
- * Sorted by air time — used for the daily digest (not 30‑min pings).
+ * Pick a display (English/romaji) title plus a distinct Japanese/native title.
+ * We want the user to always be able to recognise the show, so we surface both
+ * when they differ (e.g. "Frieren" + "葬送のフリーレン").
  */
-async function fetchTodayAnime() {
-  const { startSec, endSec, ymd } = dayBounds(config.timezone);
+function pickTitles(mediaTitle = {}) {
+  const english = mediaTitle.english || null;
+  const romaji = mediaTitle.romaji || null;
+  const native = mediaTitle.native || null;
+
+  const primary = english || romaji || native || "Unknown anime";
+
+  // The "other name" we show in parentheses: prefer the Japanese native script,
+  // fall back to romaji, but never repeat what's already the primary.
+  let secondary = null;
+  if (native && native !== primary) secondary = native;
+  else if (romaji && romaji !== primary) secondary = romaji;
+
+  // If primary came from English, romaji is also useful as a searchable spelling.
+  const romajiHint =
+    romaji && romaji !== primary && romaji !== secondary ? romaji : null;
+
+  return { primary, secondary, romajiHint };
+}
+
+/**
+ * All anime episodes airing on a given local calendar day (default MY).
+ * dayKey is a label ("today" | "tomorrow") carried into the digest sections.
+ */
+async function fetchAnimeForDay(dayKey, date = new Date()) {
+  const { startSec, endSec, ymd } = dayBounds(config.timezone, date);
   const query = `
     query ($page: Int, $from: Int, $to: Int) {
       Page(page: $page, perPage: 50) {
@@ -79,11 +104,7 @@ async function fetchTodayAnime() {
       const format = (media.format || "").toUpperCase();
       if (["MUSIC", "MANGA", "NOVEL"].includes(format)) continue;
 
-      const title =
-        media.title?.english ||
-        media.title?.romaji ||
-        media.title?.native ||
-        "Unknown anime";
+      const { primary, secondary, romajiHint } = pickTitles(media.title);
       const airingAtMs = item.airingAt * 1000;
       const localTime = formatLocalTime(config.timezone, airingAtMs);
 
@@ -98,7 +119,10 @@ async function fetchTodayAnime() {
       results.push({
         id: `anime:${item.id}:${ymd}`,
         kind: "anime",
-        title,
+        day: dayKey,
+        title: primary,
+        nativeTitle: secondary,
+        romajiTitle: romajiHint,
         subtitle: `Episode ${item.episode}${media.episodes ? ` / ${media.episodes}` : ""}`,
         url: media.siteUrl,
         image: media.coverImage?.large || null,
@@ -118,8 +142,18 @@ async function fetchTodayAnime() {
     if (!schedules.length) break;
   }
 
-  log.info("anilist today", { ymd, count: results.length });
+  log.info(`anilist ${dayKey}`, { ymd, count: results.length });
   return results;
 }
 
-module.exports = { fetchTodayAnime };
+/** Anime airing on the local calendar day = today. */
+function fetchTodayAnime() {
+  return fetchAnimeForDay("today", new Date());
+}
+
+/** Anime airing on the local calendar day = tomorrow. */
+function fetchTomorrowAnime() {
+  return fetchAnimeForDay("tomorrow", addDays(1));
+}
+
+module.exports = { fetchTodayAnime, fetchTomorrowAnime, fetchAnimeForDay };
