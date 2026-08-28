@@ -1,6 +1,6 @@
 const config = require("../config");
-const { formatAvailability } = require("../utils/matchServices");
-const { localYmd } = require("../time");
+const { formatAvailability, matchServices } = require("../utils/matchServices");
+const { localYmd, ymdForDay, dayWord } = require("../time");
 const log = require("../logger");
 
 const BASE = "https://api.themoviedb.org/3";
@@ -41,16 +41,65 @@ async function fetchWatchProviders(mediaType, id) {
     ...config.fallbackRegions.filter((r) => r !== config.primaryRegion),
   ];
 
+  // TMDB only exposes one "where to watch" page per region (JustWatch), not
+  // per-service deep links — so we keep that single link per region.
+  const linkByRegion = {};
+
   for (const region of regions) {
     const entry = results[region];
     byRegion[region] = entry ? providerNamesFromResults(entry) : [];
+    if (entry?.link) linkByRegion[region] = entry.link;
   }
 
+  byRegion.__links = linkByRegion;
   return byRegion;
 }
 
 function todayLocal() {
   return localYmd(config.timezone);
+}
+
+/** Wording that reads right on each calendar tab. */
+const TV_TIMING = {
+  yesterday: "Aired yesterday",
+  today: "Airing today",
+  tomorrow: "Airing tomorrow",
+};
+
+/**
+ * TMDB provider ids for the services in config/services.json, for the primary
+ * region. Resolved from TMDB's own directory rather than hard-coded, so
+ * services.json stays the single place you list what you subscribe to.
+ * Cached for a day — the directory changes about never.
+ */
+const PROVIDER_TTL_MS = 24 * 60 * 60 * 1000;
+let providerCache = { ids: null, at: 0 };
+
+async function serviceProviderIds() {
+  if (providerCache.ids && Date.now() - providerCache.at < PROVIDER_TTL_MS) {
+    return providerCache.ids;
+  }
+
+  const data = await tmdb("/watch/providers/movie", {
+    watch_region: config.primaryRegion,
+  });
+
+  const ids = [];
+  const names = [];
+  for (const p of data.results || []) {
+    if (!p.provider_id || !p.provider_name) continue;
+    if (!matchServices([p.provider_name], config.services).length) continue;
+    ids.push(p.provider_id);
+    names.push(p.provider_name);
+  }
+
+  providerCache = { ids, at: Date.now() };
+  log.info("tmdb providers resolved", {
+    region: config.primaryRegion,
+    count: ids.length,
+    names,
+  });
+  return ids;
 }
 
 function daysAgoLocal(days) {
@@ -60,22 +109,56 @@ function daysAgoLocal(days) {
 }
 
 /**
- * Movies with primary release date = local today, on your services.
+ * Movies newly available to stream on your services.
+ *
+ * TMDB exposes no "added to Netflix on <date>" field, so asking for films
+ * *released* on one calendar day and already streaming returns nothing — a film
+ * released today is in cinemas, not on a subscription. Instead we ask the
+ * question the data can answer: recent releases that are on your services right
+ * now, newest first. That makes this a rolling window like cinema and games
+ * rather than something the day tabs slice.
  */
-async function fetchNewMovies() {
+async function fetchNewOnServices() {
   const today = todayLocal();
-  const data = await tmdb("/discover/movie", {
-    "primary_release_date.gte": today,
+  const since = daysAgoLocal(config.movieWindowDays);
+
+  const providerIds = await serviceProviderIds();
+  if (!providerIds.length) {
+    log.warn("no TMDB providers matched services.json; using popularity fallback");
+    return fetchRecentPopularOnServices(since, today);
+  }
+
+  const params = {
+    watch_region: config.primaryRegion,
+    with_watch_providers: providerIds.join("|"),
+    // Subscription only: without this, anything rentable on the Apple TV store
+    // counts as "on your services".
+    with_watch_monetization_types: "flatrate",
+    "primary_release_date.gte": since,
     "primary_release_date.lte": today,
-    sort_by: "popularity.desc",
+    // Newest first so the section actually turns over day to day; a popularity
+    // sort would show the same big titles for weeks.
+    sort_by: "primary_release_date.desc",
     include_adult: "false",
-    page: 1,
-  });
+  };
 
-  const items = data.results || [];
+  // Newest-first drags in a long tail of filler, so over-fetch and let the
+  // popularity floor do the curating.
+  const candidates = [];
+  for (let page = 1; page <= 3; page += 1) {
+    const data = await tmdb("/discover/movie", { ...params, page });
+    const results = data.results || [];
+    candidates.push(
+      ...results.filter((m) => (m.popularity || 0) >= config.movieMinPopularity)
+    );
+    if (candidates.length >= config.maxMovies) break;
+    if (page >= (data.total_pages || 1)) break;
+  }
+
   const out = [];
-
-  for (const movie of items.slice(0, config.maxMovies)) {
+  for (const movie of candidates.slice(0, config.maxMovies)) {
+    // We already know it's on a tracked service; this call is for the names and
+    // the region "where to watch" link the digest line shows.
     const byRegion = await fetchWatchProviders("movie", movie.id);
     const availability = formatAvailability(
       byRegion,
@@ -84,39 +167,87 @@ async function fetchNewMovies() {
       config.services
     );
 
-    if (!availability.hasAny) continue;
-
-    out.push({
-      id: `movie:${movie.id}:${today}`,
-      kind: "movie",
-      title: movie.title || movie.original_title || "Untitled movie",
-      subtitle: movie.release_date ? `Released ${movie.release_date}` : "New movie",
-      url: `https://www.themoviedb.org/movie/${movie.id}`,
-      image: movie.poster_path
-        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-        : null,
-      color: "#E50914",
-      overview: movie.overview || "",
-      rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
-      availability,
-      timingLabel: "Released today",
-    });
-
+    out.push(buildMovie(movie, availability, today));
     await sleep(120);
   }
 
-  log.info("tmdb movies today", { today, count: out.length });
+  log.info("tmdb movies streaming", { since, today, count: out.length });
   return out;
 }
 
 /**
- * TV airing today (TMDB list), filtered to your services.
+ * Fallback for when no provider id matches services.json: ask for recent
+ * popular films and filter on the watch-provider payload instead. Slower and
+ * broader, but it still answers "what can I actually watch".
  */
-async function fetchAiringTv() {
-  const today = todayLocal();
-  const data = await tmdb("/tv/airing_today", {
+async function fetchRecentPopularOnServices(since, today) {
+  const data = await tmdb("/discover/movie", {
+    "primary_release_date.gte": since,
+    "primary_release_date.lte": today,
+    sort_by: "popularity.desc",
+    include_adult: "false",
     page: 1,
+  });
+
+  const out = [];
+  for (const movie of data.results || []) {
+    if (out.length >= config.maxMovies) break;
+
+    const byRegion = await fetchWatchProviders("movie", movie.id);
+    const availability = formatAvailability(
+      byRegion,
+      config.primaryRegion,
+      config.fallbackRegions,
+      config.services
+    );
+    if (!availability.hasAny) continue;
+
+    out.push(buildMovie(movie, availability, today));
+    await sleep(120);
+  }
+
+  log.info("tmdb movies streaming (fallback)", { since, today, count: out.length });
+  return out;
+}
+
+function buildMovie(movie, availability, today) {
+  const date = movie.release_date || null;
+  return {
+    id: `movie:${movie.id}:${date || today}`,
+    kind: "movie",
+    // A rolling window, not one calendar day — shown on every tab.
+    day: "any",
+    title: movie.title || movie.original_title || "Untitled movie",
+    subtitle: date ? `Released ${date}` : "New on your services",
+    url: `https://www.themoviedb.org/movie/${movie.id}`,
+    image: movie.poster_path
+      ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+      : null,
+    color: "#E50914",
+    overview: movie.overview || "",
+    rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
+    releaseDate: date,
+    availability,
+    timingLabel: "New to stream",
+  };
+}
+
+/**
+ * TV with an episode airing on the given calendar day, filtered to your
+ * services. /tv/airing_today only ever knows about "now", so the board uses
+ * /discover/tv with an explicit air-date window — that answers yesterday and
+ * tomorrow with the same query.
+ */
+async function fetchTvForDay(dayKey) {
+  const ymd = ymdForDay(config.timezone, dayKey);
+  const data = await tmdb("/discover/tv", {
+    "air_date.gte": ymd,
+    "air_date.lte": ymd,
+    sort_by: "popularity.desc",
+    timezone: config.timezone,
+    include_null_first_air_dates: "false",
     language: "en-US",
+    page: 1,
   });
 
   const items = data.results || [];
@@ -134,10 +265,11 @@ async function fetchAiringTv() {
     if (!availability.hasAny) continue;
 
     out.push({
-      id: `tv:${show.id}:${today}`,
+      id: `tv:${show.id}:${ymd}`,
       kind: "tv",
+      day: dayKey,
       title: show.name || show.original_name || "Untitled show",
-      subtitle: "Episode airing today",
+      subtitle: `Episode airing ${dayWord(dayKey)}`,
       url: `https://www.themoviedb.org/tv/${show.id}`,
       image: show.poster_path
         ? `https://image.tmdb.org/t/p/w500${show.poster_path}`
@@ -145,66 +277,15 @@ async function fetchAiringTv() {
       color: "#1CE783",
       overview: show.overview || "",
       rating: show.vote_average ? show.vote_average.toFixed(1) : null,
+      releaseDate: ymd,
       availability,
-      timingLabel: "Airing today",
+      timingLabel: TV_TIMING[dayKey] || `Airing ${ymd}`,
     });
 
     await sleep(120);
   }
 
-  log.info("tmdb tv today", { today, count: out.length });
-  return out;
-}
-
-/**
- * Recent movies (last 2 local days, not today) still useful for a morning digest.
- */
-async function fetchRecentlyAvailable() {
-  const today = todayLocal();
-  const gte = daysAgoLocal(2);
-
-  const movieData = await tmdb("/discover/movie", {
-    "primary_release_date.gte": gte,
-    "primary_release_date.lte": today,
-    sort_by: "popularity.desc",
-    include_adult: "false",
-    page: 1,
-  });
-
-  const out = [];
-  for (const movie of (movieData.results || []).slice(0, 8)) {
-    if (movie.release_date === today) continue;
-
-    const byRegion = await fetchWatchProviders("movie", movie.id);
-    const availability = formatAvailability(
-      byRegion,
-      config.primaryRegion,
-      config.fallbackRegions,
-      config.services
-    );
-    if (!availability.hasAny) continue;
-
-    out.push({
-      id: `movie-recent:${movie.id}:${movie.release_date || today}`,
-      kind: "movie",
-      title: movie.title || movie.original_title || "Untitled movie",
-      subtitle: movie.release_date
-        ? `Recent release (${movie.release_date})`
-        : "Recent release",
-      url: `https://www.themoviedb.org/movie/${movie.id}`,
-      image: movie.poster_path
-        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-        : null,
-      color: "#E50914",
-      overview: movie.overview || "",
-      rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
-      availability,
-      timingLabel: "Recent release",
-    });
-    await sleep(120);
-  }
-
-  log.info("tmdb movies recent", { gte, today, count: out.length });
+  log.info(`tmdb tv ${dayKey}`, { ymd, count: out.length });
   return out;
 }
 
@@ -237,6 +318,7 @@ async function fetchUpcomingCinema() {
     out.push({
       id: `cinema:${movie.id}:${date || until}`,
       kind: "cinema",
+      day: "any",
       title: movie.title || movie.original_title || "Untitled film",
       subtitle: date ? `In cinemas ${date}` : "Coming to cinemas",
       url: `https://www.themoviedb.org/movie/${movie.id}`,
@@ -266,8 +348,7 @@ function sleep(ms) {
 }
 
 module.exports = {
-  fetchNewMovies,
-  fetchAiringTv,
-  fetchRecentlyAvailable,
+  fetchNewOnServices,
+  fetchTvForDay,
   fetchUpcomingCinema,
 };

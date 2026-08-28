@@ -31,7 +31,10 @@ const defaultWeeklyLogDir = path.join(
 
 const config = {
   discordToken: required("DISCORD_TOKEN"),
-  channelId: required("DISCORD_CHANNEL_ID"),
+  /** First configured channel — kept for anything expecting a single id. */
+  channelId: required("DISCORD_CHANNEL_ID").split(",")[0].trim(),
+  /** Every channel the digest posts to (comma-separated in DISCORD_CHANNEL_ID). */
+  channelIds: list("DISCORD_CHANNEL_ID"),
   tmdbApiKey: required("TMDB_API_KEY"),
   // Optional: free key from https://rawg.io/apidocs. Not required — without it
   // the games section falls back to Steam's public API (no key needed).
@@ -86,6 +89,19 @@ const config = {
 
   /** How many days ahead to look for cinema / game releases. */
   cinemaWindowDays: Number(process.env.CINEMA_WINDOW_DAYS || 45),
+
+  /**
+   * How far back "new on your services" reaches. TMDB can't tell us the date a
+   * film landed on Netflix — only when it released — so a recent release that
+   * is streaming now is the closest honest proxy for a new arrival.
+   */
+  movieWindowDays: Number(process.env.MOVIE_WINDOW_DAYS || 90),
+  /**
+   * Drops the long tail of filler (obscure standup specials, regional shorts)
+   * that a newest-first sort otherwise puts at the top. TMDB has no popularity
+   * filter in discover, so this is applied to the results we get back.
+   */
+  movieMinPopularity: Number(process.env.MOVIE_MIN_POPULARITY || 10),
   gameWindowDays: Number(process.env.GAME_WINDOW_DAYS || 30),
   services: servicesConfig.services,
   dataDir,

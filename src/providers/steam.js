@@ -74,6 +74,8 @@ async function fetchGameReleases() {
     out.push({
       id: `game:steam:${item.id}:${dateText || today}`,
       kind: "game",
+      // Rolling release window, not one calendar day — shown on every tab.
+      day: "any",
       title: details.name || item.name || "Untitled game",
       subtitle: dateText
         ? isComingSoon

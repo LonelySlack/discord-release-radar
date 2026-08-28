@@ -1,5 +1,5 @@
 const config = require("../config");
-const { dayBounds, formatLocalTime, addDays } = require("../time");
+const { dayBounds, formatLocalTime, dateForDay } = require("../time");
 const log = require("../logger");
 
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -53,7 +53,8 @@ function pickTitles(mediaTitle = {}) {
 
 /**
  * All anime episodes airing on a given local calendar day (default MY).
- * dayKey is a label ("today" | "tomorrow") carried into the digest sections.
+ * dayKey is a label ("yesterday" | "today" | "tomorrow") carried into the
+ * digest so the calendar tabs can slice by it.
  */
 async function fetchAnimeForDay(dayKey, date = new Date()) {
   const { startSec, endSec, ymd } = dayBounds(config.timezone, date);
@@ -108,13 +109,28 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
       const airingAtMs = item.airingAt * 1000;
       const localTime = formatLocalTime(config.timezone, airingAtMs);
 
+      // AniList hands us real per-show watch URLs (Crunchyroll, Netflix, …).
+      // Keep the url alongside the name so the digest can link straight to the
+      // episode's page instead of only naming the service.
       const streamingLinks = (media.externalLinks || [])
-        .filter((l) =>
-          /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|bilibili|youtube/i.test(
-            l.site || ""
-          )
+        .filter(
+          (l) =>
+            l.url &&
+            /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|bilibili|youtube/i.test(
+              l.site || ""
+            )
         )
-        .map((l) => l.site);
+        .map((l) => ({ site: l.site, url: l.url }));
+
+      // AniList often lists a service twice (channel + playlist) — keep the
+      // first URL per service so the digest never reads "YouTube · YouTube".
+      const seenSites = new Set();
+      const uniqueLinks = streamingLinks.filter((l) => {
+        const key = l.site.toLowerCase();
+        if (seenSites.has(key)) return false;
+        seenSites.add(key);
+        return true;
+      });
 
       results.push({
         id: `anime:${item.id}:${ymd}`,
@@ -124,6 +140,7 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
         nativeTitle: secondary,
         romajiTitle: romajiHint,
         subtitle: `Episode ${item.episode}${media.episodes ? ` / ${media.episodes}` : ""}`,
+        epLabel: `Ep ${item.episode}${media.episodes ? `/${media.episodes}` : ""}`,
         url: media.siteUrl,
         image: media.coverImage?.large || null,
         color: media.coverImage?.color || "#7C4DFF",
@@ -134,7 +151,8 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
         rating: media.averageScore
           ? (media.averageScore / 10).toFixed(1)
           : null,
-        providerHints: streamingLinks,
+        providerHints: uniqueLinks.map((l) => l.site),
+        watchLinks: uniqueLinks,
         timingLabel: `${localTime} MYT`,
       });
     }
@@ -146,14 +164,9 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
   return results;
 }
 
-/** Anime airing on the local calendar day = today. */
-function fetchTodayAnime() {
-  return fetchAnimeForDay("today", new Date());
+/** Anime for one calendar tab: "yesterday" | "today" | "tomorrow". */
+function fetchAnimeForDayKey(dayKey) {
+  return fetchAnimeForDay(dayKey, dateForDay(dayKey));
 }
 
-/** Anime airing on the local calendar day = tomorrow. */
-function fetchTomorrowAnime() {
-  return fetchAnimeForDay("tomorrow", addDays(1));
-}
-
-module.exports = { fetchTodayAnime, fetchTomorrowAnime, fetchAnimeForDay };
+module.exports = { fetchAnimeForDay, fetchAnimeForDayKey };

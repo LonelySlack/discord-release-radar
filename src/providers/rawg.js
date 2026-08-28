@@ -49,6 +49,8 @@ async function fetchGameReleases() {
     out.push({
       id: `game:${game.id}:${date || to}`,
       kind: "game",
+      // Rolling release window, not one calendar day — shown on every tab.
+      day: "any",
       title: game.name || "Untitled game",
       subtitle: date ? (isOut ? `Released ${date}` : `Releases ${date}`) : "New game",
       url: game.slug ? `https://rawg.io/games/${game.slug}` : null,

@@ -9,32 +9,39 @@ const {
 } = require("./db");
 const { sendDailyDigest, sendWeeklyOpsSummary } = require("./notifier");
 const { remember } = require("./digestStore");
-const { fetchTodayAnime, fetchTomorrowAnime } = require("./providers/anilist");
+const { fetchAnimeForDayKey } = require("./providers/anilist");
 const {
-  fetchNewMovies,
-  fetchAiringTv,
-  fetchRecentlyAvailable,
+  fetchNewOnServices,
+  fetchTvForDay,
   fetchUpcomingCinema,
 } = require("./providers/tmdb");
 const { fetchGameReleases } = require("./providers/games");
-const { localYmd, digestSlot } = require("./time");
+const { localYmd, digestSlot, DAY_KEYS } = require("./time");
 
 let running = false;
 
-async function collectToday() {
+/**
+ * Everything the board can show: anime and TV for each of the three calendar
+ * days (yesterday / today / tomorrow), plus the streaming, cinema and game
+ * windows, which aren't tied to a single day and ride along on every tab.
+ *
+ * The TV days run one after another rather than all at once — each item costs a
+ * TMDB watch-provider lookup, and three days in parallel is a burst TMDB would
+ * rather we didn't send.
+ */
+async function collectBoard() {
   const types = new Set(config.contentTypes.map((t) => t.toLowerCase()));
   const counts = { anime: 0, movies: 0, tv: 0, cinema: 0, games: 0 };
   const all = [];
 
   if (types.has("anime")) {
     try {
-      // Today + tomorrow so you can see what's coming up next, not only today.
-      const [today, tomorrow] = await Promise.all([
-        fetchTodayAnime(),
-        fetchTomorrowAnime(),
-      ]);
-      counts.anime = today.length + tomorrow.length;
-      all.push(...today, ...tomorrow);
+      // AniList is a single cheap GraphQL call per day — fine in parallel.
+      const days = await Promise.all(DAY_KEYS.map((key) => fetchAnimeForDayKey(key)));
+      for (const items of days) {
+        counts.anime += items.length;
+        all.push(...items);
+      }
     } catch (err) {
       log.error("AniList fetch failed", err);
     }
@@ -42,22 +49,23 @@ async function collectToday() {
 
   if (types.has("movie")) {
     try {
-      const movies = await fetchNewMovies();
-      const recent = await fetchRecentlyAvailable();
-      counts.movies = movies.length + recent.length;
-      all.push(...movies, ...recent);
+      const movies = await fetchNewOnServices();
+      counts.movies = movies.length;
+      all.push(...movies);
     } catch (err) {
       log.error("TMDB movies fetch failed", err);
     }
   }
 
   if (types.has("tv")) {
-    try {
-      const tv = await fetchAiringTv();
-      counts.tv = tv.length;
-      all.push(...tv);
-    } catch (err) {
-      log.error("TMDB TV fetch failed", err);
+    for (const key of DAY_KEYS) {
+      try {
+        const tv = await fetchTvForDay(key);
+        counts.tv += tv.length;
+        all.push(...tv);
+      } catch (err) {
+        log.error(`TMDB TV fetch failed (${key})`, err);
+      }
     }
   }
 
@@ -114,27 +122,38 @@ async function runDailyDigest(client, opts = {}) {
       return;
     }
 
-    const channel = await client.channels.fetch(config.channelId);
-    if (!channel || !channel.isTextBased()) {
-      const errorMsg = "DISCORD_CHANNEL_ID is not a text channel";
+    const channels = await resolveChannels(client);
+    if (!channels.length) {
+      const errorMsg = "No usable channel in DISCORD_CHANNEL_ID";
       log.error(errorMsg);
       logPoll({ ymd, ...counts, sent: false, error: errorMsg });
       return;
     }
 
-    const collected = await collectToday();
+    const collected = await collectBoard();
     counts = collected.counts;
     const releases = collected.all;
 
-    const message = await sendDailyDigest(channel, releases, ymd, slot);
-    if (message?.id) {
-      // Remember the data so the filter buttons on this message can re-render it.
-      remember(message.id, { releases, ymd, slot });
+    // Each channel gets its own message, and each is remembered separately so
+    // the tabs and arrows work independently per channel.
+    let delivered = 0;
+    for (const channel of channels) {
+      try {
+        const message = await sendDailyDigest(channel, releases, ymd, slot);
+        if (message?.id) remember(message.id, { releases, ymd, slot });
+        delivered += 1;
+      } catch (err) {
+        // One bad channel shouldn't cost everyone else their digest.
+        log.error(`digest send failed for #${channel.name}`, err);
+      }
     }
+
+    if (!delivered) throw new Error("digest failed for every channel");
+
     markDigestSent(
       ymd,
       slot,
-      `${slot} digest ${ymd} (${releases.length} items)`
+      `${slot} digest ${ymd} (${releases.length} items, ${delivered} channel(s))`
     );
 
     log.pollResult({
@@ -154,10 +173,28 @@ async function runDailyDigest(client, opts = {}) {
   }
 }
 
+/** Fetch every configured channel, skipping any that can't be used. */
+async function resolveChannels(client) {
+  const channels = [];
+  for (const id of config.channelIds) {
+    try {
+      const channel = await client.channels.fetch(id);
+      if (!channel?.isTextBased()) {
+        log.error(`channel ${id} is not a text channel`);
+        continue;
+      }
+      channels.push(channel);
+    } catch (err) {
+      log.error(`channel ${id} could not be fetched`, err);
+    }
+  }
+  return channels;
+}
+
 async function runWeeklySummary(client) {
   try {
-    const channel = await client.channels.fetch(config.channelId);
-    if (!channel || !channel.isTextBased()) return;
+    const channels = await resolveChannels(client);
+    if (!channels.length) return;
 
     const polls = getRecentPolls(14);
     const lines = polls.map((p) => {
@@ -174,8 +211,14 @@ async function runWeeklySummary(client) {
       `_Detailed logs: \`${config.weeklyLogDir}\`_`,
     ].join("\n");
 
-    await sendWeeklyOpsSummary(channel, body);
-    log.info("weekly ops summary posted");
+    for (const channel of channels) {
+      try {
+        await sendWeeklyOpsSummary(channel, body);
+      } catch (err) {
+        log.error(`weekly summary failed for #${channel.name}`, err);
+      }
+    }
+    log.info("weekly ops summary posted", { channels: channels.length });
   } catch (err) {
     log.error("weekly summary failed", err);
   }
@@ -226,5 +269,5 @@ module.exports = {
   startScheduler,
   runDailyDigest,
   runWeeklySummary,
-  collectToday,
+  collectBoard,
 };

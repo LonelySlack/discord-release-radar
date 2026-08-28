@@ -2,12 +2,30 @@
 
 Lightweight **Node.js** Discord bot that posts **one daily digest** into **`#releases`**:
 
-- 🎌 **Anime** airing **today and tomorrow** (AniList schedule, local MY times) — shows both the English **and** Japanese/native title, e.g. `Frieren 「葬送のフリーレン」`
-- 🎬 **Movies** released today / recent on your streaming services (TMDB)
-- 📺 **TV** airing today on your services (TMDB)
+- 📅 **Calendar row at the top** — tap **⬅️ yesterday · 📍 today · ➡️ tomorrow** (each button shows its real date) to move the whole board between the three days
+- 🎌 **Anime** airing on the selected day (AniList schedule, local MY times) — shows both the English **and** Japanese/native title, e.g. `Frieren 「葬送のフリーレン」`
+- 🎬 **New on your services** — recent films that are actually streaming on your Netflix / Disney+ / Prime / HBO Max / Viu right now (TMDB), newest first
+- 📺 **TV** airing on the selected day, on your services (TMDB)
 - 🎟️ **Coming to cinemas** — upcoming theatrical releases in your region (TMDB), e.g. *Spider-Man: Brand New Day*
 - 🎮 **Game releases** — recent + upcoming games. Works with **no API key** via Steam's public storefront (PC titles); add an optional free RAWG key for cross-platform coverage
-- 🗂️ **Filter buttons** under each digest — tap **Anime / Movies / TV / Cinema / Games** to get a private (ephemeral) view of just that category, so the board never feels cluttered
+- 🗂️ **Filter buttons** underneath — tap **Anime / Movies / TV / Cinema / Games** to narrow the board to one category, so it never feels cluttered
+
+Anime and TV are day-bound and change with the calendar tab. Movies, cinema and
+games are rolling windows, so they stay put on every tab — the description
+splits the two onto separate count lines.
+
+**Why movies aren't day-bound:** TMDB has no "added to Netflix on *date*" field,
+only a release date — and a film released today is in cinemas, not on a
+subscription, so asking for "films released today that are streaming" returns
+nothing, every day. So the section answers the question the data can actually
+answer: recent releases (`MOVIE_WINDOW_DAYS`, default 90) that are on your
+services *now*, newest first, with a popularity floor
+(`MOVIE_MIN_POPULARITY`) to keep filler out. The TMDB provider ids are resolved
+from `config/services.json` at runtime, so that file stays the only place you
+list what you subscribe to.
+
+The digest is **one message**: the calendar sits above the embed, the filters
+and page arrows below it, and every click edits that same message in place.
 
 Also keeps **weekly ops logs** (errors + poll history) under `~/logs/release-radar-weekly/`, with an optional Sunday Discord summary.
 
@@ -69,7 +87,7 @@ key at [rawg.io](https://rawg.io/apidocs) and set `RAWG_API_KEY=...` in `.env` �
 the bot auto-switches to RAWG when a key is present. Force a source explicitly
 with `GAME_SOURCE=steam` or `GAME_SOURCE=rawg`.
 
-> The filter buttons work out of the box; they need **no extra Discord intents** (button clicks are delivered regardless).
+> The calendar and filter buttons work out of the box; they need **no extra Discord intents** (button clicks are delivered regardless).
 
 ### 4. Install & configure
 
@@ -151,11 +169,11 @@ discord-release-radar/
 │   ├── db.js
 │   ├── notifier.js        # Discord embeds
 │   ├── scheduler.js       # cron poll loop
-│   ├── interactions.js    # filter buttons → ephemeral filtered view
+│   ├── interactions.js    # calendar + filter buttons → re-render in place
 │   ├── digestStore.js     # remembers posted digests so buttons can re-render
 │   ├── providers/
-│   │   ├── anilist.js     # anime airing schedule (today + tomorrow, JP names)
-│   │   ├── tmdb.js        # movies + TV + upcoming cinema + watch regions
+│   │   ├── anilist.js     # anime airing schedule (per day, JP names)
+│   │   ├── tmdb.js        # TV per day, streaming arrivals, cinema, watch regions
 │   │   ├── games.js       # dispatcher: picks steam (no key) or rawg
 │   │   ├── steam.js       # game releases via Steam public API (no key)
 │   │   └── rawg.js        # game releases (optional RAWG key)
@@ -212,7 +230,7 @@ drop to an **LTS Node** (e.g. 20 or 22) which prebuilts always cover — e.g. wi
 - **Low quality (shovelware):** the keyless Steam source only sees Steam's front-page
   lists (PC only). For cleaner, cross-platform results add a free `RAWG_API_KEY`.
 
-### Filter buttons say "this digest expired"
+### Calendar / filter buttons say "this digest expired"
 
 The buttons hold their data **in memory**, so a bot restart clears older digests'
 buttons. This is expected — the **next** posted digest's buttons work normally.

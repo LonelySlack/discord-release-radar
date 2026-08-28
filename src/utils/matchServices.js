@@ -40,9 +40,14 @@ function formatAvailability(availabilityByRegion, primaryRegion, fallbackRegions
   const primaryServices = byRegion[primaryRegion] || [];
   const otherRegions = Object.entries(byRegion).filter(([r]) => r !== primaryRegion);
 
+  // Per-region "where to watch" pages, when the caller supplied them.
+  const links = availabilityByRegion.__links || {};
+
   return {
     primaryServices,
     otherRegions, // [[region, services[]], ...]
+    primaryLink: links[primaryRegion] || null,
+    linkByRegion: links,
     hasAny: primaryServices.length > 0 || otherRegions.length > 0,
     onPrimary: primaryServices.length > 0,
   };

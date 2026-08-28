@@ -140,6 +140,53 @@ function isoWeekKey(date = new Date()) {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
+/**
+ * The board covers three calendar days. These drive the calendar row at the
+ * top of the digest, the per-day fetches, and the section headings — keep
+ * them in display order (oldest first).
+ */
+const DAY_TABS = [
+  { key: "yesterday", offset: -1, emoji: "⬅️", name: "Yesterday" },
+  { key: "today", offset: 0, emoji: "📍", name: "Today" },
+  { key: "tomorrow", offset: 1, emoji: "➡️", name: "Tomorrow" },
+];
+
+const DAY_KEYS = DAY_TABS.map((d) => d.key);
+
+/** The tab record for a key, defaulting to today for anything unrecognised. */
+function dayTab(key) {
+  return DAY_TABS.find((d) => d.key === key) || DAY_TABS[1];
+}
+
+function isDayKey(key) {
+  return DAY_KEYS.includes(key);
+}
+
+/** The Date that a day key points at, relative to `now`. */
+function dateForDay(key, now = new Date()) {
+  return addDays(dayTab(key).offset, now);
+}
+
+/** Local YYYY-MM-DD for a day key. */
+function ymdForDay(timeZone, key, now = new Date()) {
+  return localYmd(timeZone, dateForDay(key, now));
+}
+
+/** Compact calendar-button label, e.g. "Thu 27 Aug". */
+function formatDayTabLabel(timeZone, key, now = new Date()) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(dateForDay(key, now));
+}
+
+/** The word a section heading uses: "yesterday" | "today" | "tomorrow". */
+function dayWord(key) {
+  return dayTab(key).key;
+}
+
 module.exports = {
   addDays,
   localYmd,
@@ -151,4 +198,12 @@ module.exports = {
   digestSlot,
   slotLabel,
   isoWeekKey,
+  DAY_TABS,
+  DAY_KEYS,
+  dayTab,
+  isDayKey,
+  dateForDay,
+  ymdForDay,
+  formatDayTabLabel,
+  dayWord,
 };

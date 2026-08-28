@@ -3,6 +3,7 @@ const config = require("./config");
 const log = require("./logger");
 const { startScheduler } = require("./scheduler");
 const { registerInteractions } = require("./interactions");
+const { registerCommands } = require("./commands");
 
 log.initLogger(config.weeklyLogDir);
 
@@ -21,6 +22,7 @@ client.once(Events.ClientReady, (c) => {
 
   c.user.setActivity("today's releases · MY", { type: ActivityType.Watching });
   registerInteractions(client);
+  registerCommands(client).catch((err) => log.error("command registration", err));
   startScheduler(client);
 });
 

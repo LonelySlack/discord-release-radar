@@ -7,9 +7,9 @@
  * used for movies/TV/cinema. Anime + Steam games work with no key.
  */
 const config = require("../src/config");
-const { collectToday } = require("../src/scheduler");
-const { buildDailyDigestEmbeds } = require("../src/notifier");
-const { localYmd } = require("../src/time");
+const { collectBoard } = require("../src/scheduler");
+const { buildDigestPage } = require("../src/notifier");
+const { localYmd, DAY_KEYS } = require("../src/time");
 
 function stripMarkdownLinks(text) {
   // [Title](url) -> Title (url)
@@ -22,18 +22,30 @@ function stripMarkdownLinks(text) {
       `Content: ${config.contentTypes.join(", ")}\nFetching…\n`
   );
 
-  const { all, counts } = await collectToday();
+  const { all, counts } = await collectBoard();
   const ymd = localYmd(config.timezone);
-  const embeds = buildDailyDigestEmbeds(all, ymd, "morning", "all");
 
-  for (const embed of embeds) {
-    const d = embed.data;
-    if (d.title) console.log(`\n================ ${d.title} ================`);
-    if (d.description) console.log(stripMarkdownLinks(d.description));
-    for (const field of d.fields || []) {
-      console.log(`\n${field.name}`);
-      console.log(stripMarkdownLinks(field.value));
-    }
+  // Walk every calendar tab, and inside each every page the ▶ button would
+  // reach — so the preview shows the whole board, not just the tab and page
+  // that get posted.
+  for (const day of DAY_KEYS) {
+    let page = 0;
+    let pageCount = 1;
+    do {
+      const built = buildDigestPage(all, ymd, { slot: "morning", day, filter: "all", page });
+      pageCount = built.pageCount;
+      const d = built.embed.data;
+      console.log(
+        `\n================ ${d.title} — page ${page + 1}/${pageCount} ================`
+      );
+      if (d.description) console.log(stripMarkdownLinks(d.description));
+      if (d.thumbnail?.url) console.log(`[thumbnail] ${d.thumbnail.url}`);
+      for (const field of d.fields || []) {
+        console.log(`\n${field.name}`);
+        console.log(stripMarkdownLinks(field.value));
+      }
+      page += 1;
+    } while (page < pageCount);
   }
 
   console.log("\n----------------------------------------");
