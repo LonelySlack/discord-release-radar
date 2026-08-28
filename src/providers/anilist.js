@@ -71,6 +71,7 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
             siteUrl
             format
             episodes
+            isAdult
             genres
             averageScore
             coverImage { large color }
@@ -104,6 +105,8 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
 
       const format = (media.format || "").toUpperCase();
       if (["MUSIC", "MANGA", "NOVEL"].includes(format)) continue;
+      // The digest posts to a shared channel — hentai has no business on it.
+      if (media.isAdult) continue;
 
       const { primary, secondary, romajiHint } = pickTitles(media.title);
       const airingAtMs = item.airingAt * 1000;
@@ -134,6 +137,9 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
 
       results.push({
         id: `anime:${item.id}:${ymd}`,
+        mediaId: media.id,
+        episode: item.episode,
+        totalEpisodes: media.episodes || null,
         kind: "anime",
         day: dayKey,
         title: primary,

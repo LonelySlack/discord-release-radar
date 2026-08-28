@@ -80,46 +80,92 @@ function batchEmbedsBySize(embeds, budget = MESSAGE_EMBED_BUDGET) {
   return batches;
 }
 
+/** Longest a title may run before it wraps on a phone. */
+const TITLE_MAX = 52;
+
+/** Trim at a word boundary where possible, so rows stay one line on mobile. */
+function trimTitle(text) {
+  const title = String(text || "").trim();
+  if (title.length <= TITLE_MAX) return title;
+  const cut = title.slice(0, TITLE_MAX - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > TITLE_MAX * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * Where you can watch it, as ONE short label.
+ *
+ * Rows carry exactly one link (the title), because a Discord field caps at 1024
+ * characters and counts the invisible URL text against it — a second link costs
+ * ~70 characters and buys nothing the title link doesn't already reach. So the
+ * service is named in plain text and the title is what you click.
+ *
+ * Returns null when we genuinely don't know, so the row can just say nothing
+ * rather than pad itself with "check apps".
+ */
 function shortWhere(item) {
-  if (item.kind === "cinema") return "🎬 In cinemas";
+  if (item.kind === "cinema") return null; // the section header already says it
+
   if (item.kind === "game") {
-    if (item.providerHints?.length) return item.providerHints.slice(0, 3).join(", ");
-    if (item.platforms?.length) return item.platforms.slice(0, 3).join(", ");
-    return "check stores";
+    return item.providerHints?.[0] || item.platforms?.[0] || null;
   }
 
-  // Anime: AniList gives real per-show URLs, so link each service by name.
-  // Two is enough to be useful without the line wrapping on mobile.
-  if (item.watchLinks?.length) {
-    return item.watchLinks
-      .slice(0, 2)
-      .map((l) => `[${l.site}](${l.url})`)
-      .join(" · ");
-  }
+  // Anime: AniList names the real services. One is enough on a single line.
+  if (item.watchLinks?.length) return item.watchLinks[0].site;
+  if (item.providerHints?.length) return item.providerHints[0];
 
   if (item.availability) {
-    const { onPrimary, primaryServices, otherRegions, primaryLink, linkByRegion } =
-      item.availability;
-    // TMDB only has a single per-region "where to watch" page — wrap the
-    // service list in it rather than pretending we have per-service deep links.
-    const linked = (text, url) => (url ? `[${text}](${url})` : text);
-
+    const { onPrimary, primaryServices, otherRegions } = item.availability;
     if (onPrimary && primaryServices.length) {
-      return `🇲🇾 ${linked(primaryServices.slice(0, 3).join(", "), primaryLink)}`;
+      return `${primaryServices.slice(0, 2).join(", ")}`;
     }
     if (otherRegions?.length) {
       const [region, services] = otherRegions[0];
-      return `🌍 ${region}: ${linked(
-        (services || []).slice(0, 2).join(", "),
-        (linkByRegion || {})[region]
-      )}`;
+      return `${region} · ${(services || []).slice(0, 2).join(", ")}`;
     }
-    return "tracked service (check apps)";
   }
-  if (item.providerHints?.length) {
-    return item.providerHints.slice(0, 3).join(", ");
+  return null;
+}
+
+/** The flag that tells you at a glance whether it's watchable from here. */
+function whereFlag(item) {
+  if (item.kind !== "movie" && item.kind !== "tv") return "";
+  if (!item.availability) return "";
+  return item.availability.onPrimary ? "🇲🇾 " : "🌍 ";
+}
+
+/**
+ * The one link a row gets. Movies and TV point at the region's "where to watch"
+ * page (what you actually want when you tap the title); everything else points
+ * at its own page.
+ */
+function shortenTmdb(url) {
+  // ".../movie/1516698-the-last-sunrise/watch" -> ".../movie/1516698/watch".
+  // TMDB 301s the slugless form to the full one, and the slug costs ~25
+  // characters of the 1024 a field gets — which is what forces a section to
+  // split into a second field.
+  return url.replace(
+    /(themoviedb\.org\/(?:movie|tv)\/\d+)-[^/?#]*/,
+    "$1"
+  );
+}
+
+function linkFor(item) {
+  const a = item.availability;
+  if (a) {
+    if (a.onPrimary && a.primaryLink) return a.primaryLink;
+    if (a.otherRegions?.length) {
+      const link = (a.linkByRegion || {})[a.otherRegions[0][0]];
+      if (link) return link;
+    }
   }
-  return "check apps";
+  return item.url || null;
+}
+
+/** The row's link, trimmed of anything that doesn't change where it goes. */
+function bestLink(item) {
+  const url = linkFor(item);
+  return url ? shortenTmdb(url) : null;
 }
 
 /** "2026-09-23" or "26 Aug, 2026" -> "23 Sep". Falls back to the raw string. */
@@ -127,48 +173,94 @@ function shortDate(value) {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: config.timezone,
-  });
+  return d
+    .toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: config.timezone,
+    })
+    .replace("Sept", "Sep"); // en-GB's four-letter outlier breaks the column
+}
+
+/** Sort key for a row's date; undated rows sink to the bottom. */
+function dateValue(item) {
+  const t = new Date(item.releaseDate).getTime();
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
 }
 
 /**
- * One item, formatted per section. The section header already says what the
- * list is ("TV airing today"), so lines carry only what differs between rows —
- * no "Airing today · … — Episode airing today" repetition. Cinema and games
- * fit on a single line; anime and shows use a second, indented detail line.
+ * One item = one line. The section header already says what the list is ("TV
+ * airing today"), and the day tab says when, so a row carries only what differs
+ * between rows: when, what, and where. Everything else — native titles, the
+ * repeated "Airing today", a second watch link — was noise that pushed the
+ * useful half of the row off a phone screen.
+ *
+ * @param {object} item
+ * @param {object} [ctx]
+ * @param {boolean} [ctx.hideWhere] drop the service when every row shares it
  */
-function lineFor(item) {
-  const title = item.url ? `[${item.title}](${item.url})` : item.title;
-  const stamp = (text) => (text ? `\`${text}\` ` : "");
+function lineFor(item, ctx = {}) {
+  const url = bestLink(item);
+  const name = trimTitle(item.title);
+  const title = url ? `[${name}](${url})` : `**${name}**`;
 
-  // Single-line kinds: the date is the only varying detail worth showing.
-  if (item.kind === "game") {
-    const store = item.providerHints?.[0] || item.platforms?.[0];
-    return `${stamp(shortDate(item.releaseDate))}${title}${store ? ` · ${store}` : ""}`;
-  }
-  if (item.kind === "cinema") {
-    return `${stamp(shortDate(item.releaseDate))}${title}`;
-  }
+  // Leading fixed-width stamp: airtime for things that air, date for things
+  // that drop. Backticks keep the column aligned down the list.
+  // Day-bound kinds take their date from the calendar tab, so a per-row stamp
+  // would just repeat it identically down the whole list.
+  const lead =
+    item.kind === "anime"
+      ? item.localTime
+      : item.kind === "tv"
+        ? null
+        : shortDate(item.releaseDate);
+  const stamp = lead ? `\`${lead}\` ` : "";
 
-  // Movies: the release date says how fresh the arrival is, then where it plays.
-  if (item.kind === "movie") {
-    return `${stamp(shortDate(item.releaseDate))}${title}\n└ ${shortWhere(item)}`;
-  }
-
-  // Anime: airtime leads, details (native title, episode, where to watch)
-  // follow. With no known stream we simply say nothing rather than pad the
-  // line with "check apps".
-  if (item.kind === "anime") {
-    const where = item.watchLinks?.length ? shortWhere(item) : null;
-    const details = [item.nativeTitle, item.epLabel, where].filter(Boolean);
-    return `${stamp(item.localTime)}${title}\n└ ${details.join(" · ")}`;
+  const bits = [];
+  if (item.kind === "anime" && item.epLabel) bits.push(item.epLabel);
+  if (!ctx.hideWhere) {
+    const where = shortWhere(item);
+    if (where) bits.push(`${whereFlag(item)}${where}`);
   }
 
-  // TV: "airing today" is already in the section header.
-  return `${title}\n└ ${shortWhere(item)}`;
+  return `${stamp}${title}${bits.length ? ` · ${bits.join(" · ")}` : ""}`;
+}
+
+/**
+ * Fold the several schedule rows a batch drop produces ("Ep 1/7", "Ep 2/7" at
+ * the same time on the same day) into one row reading "Ep 1-2/7". AniList lists
+ * every episode separately, which made a single show eat three lines of the
+ * board.
+ */
+function mergeAnimeEpisodes(items) {
+  const byShow = new Map();
+  const order = [];
+
+  for (const item of items) {
+    const key = item.mediaId ? `${item.mediaId}:${item.day}` : item.id;
+    if (!byShow.has(key)) {
+      byShow.set(key, { ...item, episodes: [] });
+      order.push(key);
+    }
+    const entry = byShow.get(key);
+    if (Number.isFinite(item.episode)) entry.episodes.push(item.episode);
+    // Keep the earliest airtime — that's when the show turns up for you.
+    if (item.airingAt && item.airingAt < entry.airingAt) {
+      entry.airingAt = item.airingAt;
+      entry.localTime = item.localTime;
+    }
+  }
+
+  return order.map((key) => {
+    const entry = byShow.get(key);
+    const eps = [...new Set(entry.episodes)].sort((a, b) => a - b);
+    if (eps.length > 1) {
+      const total = entry.totalEpisodes ? `/${entry.totalEpisodes}` : "";
+      entry.epLabel = `Ep ${eps[0]}-${eps[eps.length - 1]}${total}`;
+    }
+    delete entry.episodes;
+    return entry;
+  });
 }
 
 function chunkLines(lines, maxLen = 1000) {
@@ -189,14 +281,29 @@ function chunkLines(lines, maxLen = 1000) {
   return chunks;
 }
 
+/**
+ * A section of the board. When every row in it names the same service ("Steam"
+ * on all twelve games) that word stops distinguishing anything, so it's dropped
+ * from the rows and moved into the header instead.
+ */
 function sectionFields(name, items, emoji, emptyNote = "_Nothing here right now._") {
   if (!items.length) {
     return [{ name: `${emoji} ${name}`, value: emptyNote, inline: false }];
   }
-  const lines = items.map(lineFor);
+
+  const wheres = items.map(shortWhere);
+  const shared =
+    wheres.every((w) => w && w === wheres[0]) && items.length > 1 ? wheres[0] : null;
+
+  const lines = items.map((item) => lineFor(item, { hideWhere: Boolean(shared) }));
   const chunks = chunkLines(lines);
+  const heading = `${emoji} ${name} (${items.length})${shared ? ` · ${shared}` : ""}`;
+
+  // A section only ever splits when its links overflow Discord's 1024-character
+  // field cap. Number the parts rather than repeating "(cont.)" — with one-line
+  // rows this is now rare, and when it happens you can see how much is left.
   return chunks.map((text, i) => ({
-    name: i === 0 ? `${emoji} ${name} (${items.length})` : `${emoji} ${name} (cont.)`,
+    name: chunks.length > 1 ? `${heading} · ${i + 1}/${chunks.length}` : heading,
     value: text.slice(0, 1024),
     inline: false,
   }));
@@ -210,12 +317,24 @@ function sectionFields(name, items, emoji, emptyNote = "_Nothing here right now.
  */
 function categorize(releases, day = "today") {
   const onDay = (r) => r.day === day;
+  const byKind = (kind) => releases.filter((r) => r.kind === kind);
+
+  const anime = mergeAnimeEpisodes(
+    byKind("anime")
+      .filter(onDay)
+      .sort((a, b) => (a.airingAt || 0) - (b.airingAt || 0))
+  );
+
   return {
-    anime: releases.filter((r) => r.kind === "anime" && onDay(r)),
-    tv: releases.filter((r) => r.kind === "tv" && onDay(r)),
-    movies: releases.filter((r) => r.kind === "movie"),
-    cinema: releases.filter((r) => r.kind === "cinema"),
-    games: releases.filter((r) => r.kind === "game"),
+    anime,
+    tv: byKind("tv").filter(onDay),
+    // Newest arrival first — "what landed since I last looked" is the question
+    // this section answers.
+    movies: byKind("movie").sort((a, b) => dateValue(b) - dateValue(a)),
+    // Soonest first: these are dates you might plan around, and the list
+    // arrived from TMDB in no order at all.
+    cinema: byKind("cinema").sort((a, b) => dateValue(a) - dateValue(b)),
+    games: byKind("game").sort((a, b) => dateValue(a) - dateValue(b)),
   };
 }
 
