@@ -50,6 +50,7 @@ For a **24/7 notifier on a small DigitalOcean droplet**, Node is a bit leaner an
 - Movies / TV: notify **when catalog data says it’s out** (exact clock times are rarely public)
 - SQLite dedupe so you don’t get the same alert twice
 - Your service list lives in `config/services.json` (Netflix, Disney+, Prime, HBO Max, Viu, iQIYI, Crunchyroll, Sun NXT, beIN, Astro, …)
+- **Free & Subs** tab: Epic Games giveaways, new arrivals on Game Pass, and PlayStation Plus announcements — all keyless
 
 ---
 
@@ -86,6 +87,32 @@ Want cross-platform coverage (consoles too) with cleaner curation? Get a free
 key at [rawg.io](https://rawg.io/apidocs) and set `RAWG_API_KEY=...` in `.env` —
 the bot auto-switches to RAWG when a key is present. Force a source explicitly
 with `GAME_SOURCE=steam` or `GAME_SOURCE=rawg`.
+
+### 3c. Free & subscription games (no key needed)
+
+The **Free & Subs** tab needs no keys and no configuration. Three sources feed it:
+
+| Source | What you get | How |
+|--------|--------------|-----|
+| Epic Games | This week's giveaway + what replaces it | Public promotions endpoint |
+| Xbox Game Pass | Games that just **entered** the catalog | Catalog list, diffed against the previous run |
+| PlayStation Plus | The monthly line-up announcement | PlayStation Blog feed |
+
+Three things worth knowing before you rely on it:
+
+- **Epic** returns its whole promo carousel, most of which is ordinary sale
+  stock. Only 100%-off promotions are treated as giveaways, so a half-price
+  title never shows up claiming to be free.
+- **Game Pass** publishes no "recently added" list, so additions come from
+  diffing the full catalog against a snapshot in `meta`. The *first* run after
+  enabling it stores a baseline and reports nothing — that is expected, not a
+  fault. Console Game Pass isn't sold in MY or SG (the list returns empty), so
+  it falls back through `FALLBACK_REGIONS` and labels the row with the market it
+  came from. PC Game Pass serves MY directly.
+- **PS Plus** has no catalog API at all. You get the announcement post and its
+  date, not the individual games — the line-up only exists as prose in the post.
+
+Turn any of them off by trimming `CONTENT_TYPES` (`epic`, `gamepass`, `psplus`).
 
 > The calendar and filter buttons work out of the box; they need **no extra Discord intents** (button clicks are delivered regardless).
 
@@ -176,7 +203,10 @@ discord-release-radar/
 │   │   ├── tmdb.js        # TV per day, streaming arrivals, cinema, watch regions
 │   │   ├── games.js       # dispatcher: picks steam (no key) or rawg
 │   │   ├── steam.js       # game releases via Steam public API (no key)
-│   │   └── rawg.js        # game releases (optional RAWG key)
+│   │   ├── rawg.js        # game releases (optional RAWG key)
+│   │   ├── epic.js        # Epic giveaways: free now + free next (no key)
+│   │   ├── gamepass.js    # Game Pass additions, by diffing the catalog (no key)
+│   │   └── psplus.js      # PS Plus monthly announcement, via the blog feed
 │   └── utils/matchServices.js
 ├── .env.example
 └── package.json
@@ -191,6 +221,8 @@ discord-release-radar/
 3. **Anime** has the best “30 minutes before” timing. **Movies/TV** usually only have a **date**, not a precise clock — we notify when the data appears.
 4. Niche apps (Astro GO+, Sun NXT Lite, beIN) may have **incomplete** TMDB provider mapping — edit `config/services.json` match strings over time.
 5. Keep the droplet light: default poll is every **10 minutes**, capped TMDB pages, SQLite on disk.
+6. **Game Pass and Epic run on undocumented endpoints.** They're the same ones the storefronts themselves call, they need no key, and they can change without notice. Each section fails independently — if one breaks, the rest of the digest still posts.
+7. **PS Plus is an announcement, not a catalog.** Sony publishes no Plus API, so that section links the monthly post rather than listing its games.
 
 ---
 

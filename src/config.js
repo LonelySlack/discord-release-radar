@@ -74,7 +74,10 @@ const config = {
   postWeeklySummary:
     String(process.env.POST_WEEKLY_SUMMARY || "true").toLowerCase() !== "false",
 
-  contentTypes: list("CONTENT_TYPES", "anime,movie,tv,cinema,game"),
+  contentTypes: list(
+    "CONTENT_TYPES",
+    "anime,movie,tv,cinema,game,epic,gamepass,psplus"
+  ),
 
   /**
    * Where game releases come from: "steam" (no key) or "rawg" (needs key).
@@ -103,6 +106,13 @@ const config = {
    */
   movieMinPopularity: Number(process.env.MOVIE_MIN_POPULARITY || 10),
   gameWindowDays: Number(process.env.GAME_WINDOW_DAYS || 30),
+
+  /**
+   * How far back a PlayStation Plus announcement stays on the board. Sony posts
+   * the line-up monthly, so a window under ~30 days can leave the section empty
+   * for weeks at a time.
+   */
+  psPlusWindowDays: Number(process.env.PSPLUS_WINDOW_DAYS || 45),
   services: servicesConfig.services,
   dataDir,
   dbPath: path.join(dataDir, "radar.db"),
@@ -114,6 +124,9 @@ const config = {
   maxTv: Number(process.env.MAX_TV || 15),
   maxCinema: Number(process.env.MAX_CINEMA || 10),
   maxGames: Number(process.env.MAX_GAMES || 12),
+  maxFreeGames: Number(process.env.MAX_FREE_GAMES || 8),
+  maxGamePass: Number(process.env.MAX_GAMEPASS || 10),
+  maxPsPlus: Number(process.env.MAX_PSPLUS || 3),
 };
 
 module.exports = config;

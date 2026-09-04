@@ -23,6 +23,10 @@ const FILTERS = [
   { key: "tv", label: "TV", emoji: "📺" },
   { key: "cinema", label: "Cinema", emoji: "🎟️" },
   { key: "game", label: "Games", emoji: "🎮" },
+  // Epic giveaways, Game Pass additions and PS Plus share one tab: they answer
+  // the same question ("what can I play without paying for it") and Discord
+  // allows five buttons a row, which this fills exactly alongside the arrows.
+  { key: "subs", label: "Free & Subs", emoji: "🎁" },
 ];
 
 /**
@@ -108,6 +112,12 @@ function shortWhere(item) {
 
   if (item.kind === "game") {
     return item.providerHints?.[0] || item.platforms?.[0] || null;
+  }
+
+  // Free/subscription rows say when rather than where — "free until 10 Sep",
+  // "new on PC Game Pass" — which the provider has already phrased.
+  if (item.kind === "epic" || item.kind === "gamepass" || item.kind === "psplus") {
+    return item.providerHints?.[0] || null;
   }
 
   // Anime: AniList names the real services. One is enough on a single line.
@@ -208,10 +218,13 @@ function lineFor(item, ctx = {}) {
   // that drop. Backticks keep the column aligned down the list.
   // Day-bound kinds take their date from the calendar tab, so a per-row stamp
   // would just repeat it identically down the whole list.
+  // Epic and Game Pass rows put their timing in the trailing bit instead, so a
+  // leading stamp would print the same date twice on one line.
+  const stampless = item.kind === "tv" || item.kind === "epic" || item.kind === "gamepass";
   const lead =
     item.kind === "anime"
       ? item.localTime
-      : item.kind === "tv"
+      : stampless
         ? null
         : shortDate(item.releaseDate);
   const stamp = lead ? `\`${lead}\` ` : "";
@@ -335,6 +348,11 @@ function categorize(releases, day = "today") {
     // arrived from TMDB in no order at all.
     cinema: byKind("cinema").sort((a, b) => dateValue(a) - dateValue(b)),
     games: byKind("game").sort((a, b) => dateValue(a) - dateValue(b)),
+    // These three arrive already ordered by their providers — claimable-first
+    // for Epic, newest-first for Plus — so re-sorting here would undo it.
+    epic: byKind("epic"),
+    gamepass: byKind("gamepass"),
+    psplus: byKind("psplus"),
   };
 }
 
@@ -404,6 +422,32 @@ function fieldsForFilter(cats, filter, day = "today") {
         "_No game releases on the radar._"
       )
     );
+  if (show("subs")) {
+    fields.push(
+      ...sectionFields(
+        "Free on Epic",
+        cats.epic,
+        "🎁",
+        "_No Epic giveaway running._"
+      )
+    );
+    fields.push(
+      ...sectionFields(
+        "New on Game Pass",
+        cats.gamepass,
+        "🟩",
+        "_Nothing new on Game Pass._"
+      )
+    );
+    fields.push(
+      ...sectionFields(
+        "PlayStation Plus",
+        cats.psplus,
+        "🔵",
+        "_No PlayStation Plus news._"
+      )
+    );
+  }
 
   return fields;
 }
@@ -417,6 +461,7 @@ function itemsForFilter(cats, filter) {
   if (show("movie")) out.push(...cats.movies);
   if (show("cinema")) out.push(...cats.cinema);
   if (show("game")) out.push(...cats.games);
+  if (show("subs")) out.push(...cats.epic, ...cats.gamepass, ...cats.psplus);
   return out;
 }
 
@@ -492,6 +537,13 @@ function buildDigestPage(releases, ymd, view = {}) {
   const rollingLine =
     `🎬 **${cats.movies.length}** new to stream · 🎟️ **${cats.cinema.length}** cinema` +
     ` · 🎮 **${cats.games.length}** games`;
+  // A giveaway week is news; a quiet one isn't. Showing "0 free · 0 Game Pass"
+  // every single digest would train people to skip the header.
+  const freeCount = cats.epic.length + cats.gamepass.length + cats.psplus.length;
+  const freeLine = freeCount
+    ? `🎁 **${cats.epic.length}** free on Epic · 🟩 **${cats.gamepass.length}** new on Game Pass` +
+      ` · 🔵 **${cats.psplus.length}** PS Plus`
+    : null;
 
   const embed = new EmbedBuilder()
     .setTitle(`${dayTab(day).emoji} Release Radar · ${dayName}${titleSuffix}`)
@@ -501,8 +553,11 @@ function buildDigestPage(releases, ymd, view = {}) {
         `**${dateLabel}** · ${config.primaryRegion}-first`,
         airingLine,
         rollingLine,
+        freeLine,
         `_${nextHint}_`,
-      ].join("\n")
+      ]
+        .filter(Boolean)
+        .join("\n")
     )
     .setTimestamp(new Date())
     .setFooter({

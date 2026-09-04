@@ -16,6 +16,9 @@ const {
   fetchUpcomingCinema,
 } = require("./providers/tmdb");
 const { fetchGameReleases } = require("./providers/games");
+const { fetchFreeGames } = require("./providers/epic");
+const { fetchGamePassAdditions } = require("./providers/gamepass");
+const { fetchPsPlus } = require("./providers/psplus");
 const { localYmd, digestSlot, DAY_KEYS } = require("./time");
 
 let running = false;
@@ -29,9 +32,18 @@ let running = false;
  * TMDB watch-provider lookup, and three days in parallel is a burst TMDB would
  * rather we didn't send.
  */
-async function collectBoard() {
+async function collectBoard(opts = {}) {
   const types = new Set(config.contentTypes.map((t) => t.toLowerCase()));
-  const counts = { anime: 0, movies: 0, tv: 0, cinema: 0, games: 0 };
+  const counts = {
+    anime: 0,
+    movies: 0,
+    tv: 0,
+    cinema: 0,
+    games: 0,
+    epic: 0,
+    gamepass: 0,
+    psplus: 0,
+  };
   const all = [];
 
   if (types.has("anime")) {
@@ -89,6 +101,38 @@ async function collectBoard() {
     }
   }
 
+  if (types.has("epic")) {
+    try {
+      const free = await fetchFreeGames();
+      counts.epic = free.length;
+      all.push(...free);
+    } catch (err) {
+      log.error("Epic free games fetch failed", err);
+    }
+  }
+
+  if (types.has("gamepass")) {
+    try {
+      // Only a real digest advances the stored catalog snapshot — see the
+      // provider. A preview run reads the same diff without spending it.
+      const added = await fetchGamePassAdditions({ persist: Boolean(opts.persist) });
+      counts.gamepass = added.length;
+      all.push(...added);
+    } catch (err) {
+      log.error("Game Pass fetch failed", err);
+    }
+  }
+
+  if (types.has("psplus")) {
+    try {
+      const plus = await fetchPsPlus();
+      counts.psplus = plus.length;
+      all.push(...plus);
+    } catch (err) {
+      log.error("PS Plus fetch failed", err);
+    }
+  }
+
   return { all, counts };
 }
 
@@ -107,7 +151,16 @@ async function runDailyDigest(client, opts = {}) {
   const hours =
     config.digestHours?.length > 0 ? config.digestHours : [9, 20];
   const slot = opts.slot || digestSlot(config.timezone, hours);
-  let counts = { anime: 0, movies: 0, tv: 0, cinema: 0, games: 0 };
+  let counts = {
+    anime: 0,
+    movies: 0,
+    tv: 0,
+    cinema: 0,
+    games: 0,
+    epic: 0,
+    gamepass: 0,
+    psplus: 0,
+  };
 
   try {
     if (!opts.force && digestAlreadySent(ymd, slot)) {
@@ -130,7 +183,8 @@ async function runDailyDigest(client, opts = {}) {
       return;
     }
 
-    const collected = await collectBoard();
+    // persist: this is the run that owns the Game Pass baseline.
+    const collected = await collectBoard({ persist: true });
     counts = collected.counts;
     const releases = collected.all;
 
