@@ -3,7 +3,27 @@ const { buildDigestPage, buildBoardRows, FILTERS } = require("./notifier");
 const { isDayKey, DAY_KEYS } = require("./time");
 const { recall } = require("./digestStore");
 const { createWheel, handleWheelButton, handleAddModal } = require("./wheel");
+const { buildShowcaseBoard } = require("./showcaseNotifier");
+const { collectShowcaseBoard } = require("./scheduler");
 const log = require("./logger");
+
+/**
+ * `/showcases` — the board on demand. Answers privately unless asked to share,
+ * so checking "when is the next Direct" mid-conversation costs the channel
+ * nothing. The feeds behind it can take a few seconds, hence the defer.
+ */
+async function showShowcases(interaction) {
+  const share = interaction.options.getBoolean("share") ?? false;
+  await interaction.deferReply({
+    flags: share ? undefined : MessageFlags.Ephemeral,
+  });
+
+  const { items, announcements } = await collectShowcaseBoard();
+  await interaction.editReply({
+    content: "## 📡 Showcase Radar",
+    embeds: [buildShowcaseBoard(items, announcements)],
+  });
+}
 
 /**
  * Wire up the digest's calendar strip, category tabs and page arrows. Every
@@ -18,6 +38,12 @@ function registerInteractions(client) {
       if (interaction.isChatInputCommand() && interaction.commandName === "wheel") {
         return await createWheel(interaction);
       }
+      if (
+        interaction.isChatInputCommand() &&
+        interaction.commandName === "showcases"
+      ) {
+        return await showShowcases(interaction);
+      }
       if (interaction.isButton() && interaction.customId.startsWith("wheel:")) {
         return await handleWheelButton(interaction);
       }
@@ -28,16 +54,17 @@ function registerInteractions(client) {
         return await handleAddModal(interaction);
       }
     } catch (err) {
-      log.error("wheel interaction failed", err);
-      if (!interaction.replied && !interaction.deferred) {
-        try {
-          await interaction.reply({
-            content: "The wheel jammed — try that again.",
-            flags: MessageFlags.Ephemeral,
-          });
-        } catch {
-          /* ignore */
+      log.error("command interaction failed", err);
+      const message = "That didn't work — try again in a moment.";
+      try {
+        // A deferred reply has to be edited; a fresh one has to be created.
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content: message, embeds: [] });
+        } else {
+          await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
         }
+      } catch {
+        /* ignore */
       }
       return;
     }

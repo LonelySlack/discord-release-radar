@@ -15,6 +15,15 @@ const commands = [
         .setDescription("Optional starting entries, separated by commas")
         .setRequired(false)
     ),
+  new SlashCommandBuilder()
+    .setName("showcases")
+    .setDescription("Upcoming gaming + tech showcases (Directs, State of Play, Apple, AI keynotes)")
+    .addBooleanOption((opt) =>
+      opt
+        .setName("share")
+        .setDescription("Post it in the channel instead of only showing it to you")
+        .setRequired(false)
+    ),
 ];
 
 async function registerCommands(client) {

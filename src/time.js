@@ -187,8 +187,40 @@ function dayWord(key) {
   return dayTab(key).key;
 }
 
+/**
+ * Epoch ms for a wall-clock time in a given zone — "2026-09-24 10:00 in
+ * Asia/Tokyo" as an instant. Showcases publish their times in the host's zone,
+ * and Discord's <t:...> timestamps want an instant so every viewer sees it in
+ * their own.
+ */
+function zonedTimeToEpochMs(timeZone, ymd, hour = 0, minute = 0) {
+  const [y, m, d] = String(ymd).split("-").map(Number);
+  if (!y || !m || !d) return NaN;
+  const naive = Date.UTC(y, m - 1, d, hour, minute, 0);
+  // One correction is enough away from a DST seam, and a second pass fixes the
+  // hour on the two days a year that sit inside one.
+  let ms = naive - tzOffsetMs(timeZone, new Date(naive));
+  ms = naive - tzOffsetMs(timeZone, new Date(ms));
+  return ms;
+}
+
+/** Whole calendar days from one YYYY-MM-DD to another (b - a). */
+function daysBetweenYmd(a, b) {
+  const toUtc = (ymd) => {
+    const [y, m, d] = String(ymd).split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const from = toUtc(a);
+  const to = toUtc(b);
+  if (Number.isNaN(from) || Number.isNaN(to)) return NaN;
+  return Math.round((to - from) / 86400000);
+}
+
 module.exports = {
   addDays,
+  zonedTimeToEpochMs,
+  daysBetweenYmd,
+  tzOffsetMs,
   localYmd,
   localParts,
   dayBounds,

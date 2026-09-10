@@ -1,0 +1,336 @@
+{
+  "_readme": [
+    "Two lists feed the Showcase Radar.",
+    "",
+    "`showcases` — events with a DATE SOMEONE ANNOUNCED. These are the only ones",
+    "that fire countdown alerts, because an alert is a promise that the thing is",
+    "really happening on that day. Add one the moment a date goes public.",
+    "",
+    "`recurring` — the annual rhythm. Nobody has announced Nintendo's September",
+    "Direct yet, but there is always one, so the board can still say 'expected",
+    "mid Sep' and you can plan around it. These roll over on their own every",
+    "year and are always drawn with a ~ so nobody mistakes them for a real date.",
+    "",
+    "A `showcases` entry supersedes any `recurring` entry sharing its `series`",
+    "in the same month — so when a date is announced, the estimate disappears",
+    "instead of sitting next to it. This works for dates that have ALREADY",
+    "PASSED too, and that is the point: once September's State of Play has",
+    "aired, adding it here is what stops the board predicting another one.",
+    "",
+    "Rule shapes: {month|months, day} for a fixed date, or {month|months, week,",
+    "weekday} for 'second Thursday' (weekday 0=Sun..6=Sat, week -1 = last).",
+    "`precision` says how loudly to state it: day | week | month."
+  ],
+
+  "showcases": [
+    {
+      "id": "tgs-2026",
+      "series": "tgs",
+      "name": "Tokyo Game Show 2026",
+      "brand": "CESA",
+      "category": "gaming",
+      "date": "2026-09-17",
+      "endDate": "2026-09-21",
+      "confirmed": true,
+      "url": "https://tgs.cesa.or.jp/en/",
+      "note": "Makuhari Messe. Runs Thu 17 - Mon 21 Sep."
+    },
+    {
+      "id": "state-of-play-2026-09",
+      "series": "state-of-play",
+      "name": "PlayStation State of Play (September)",
+      "brand": "PlayStation",
+      "category": "gaming",
+      "date": "2026-09-03",
+      "confirmed": true,
+      "url": "https://blog.playstation.com/category/state-of-play/",
+      "note": "Already aired - kept so the board stops predicting a September one."
+    }
+  ],
+
+  "recurring": [
+    {
+      "id": "nintendo-direct",
+      "series": "nintendo-direct",
+      "name": "Nintendo Direct",
+      "brand": "Nintendo",
+      "category": "gaming",
+      "rule": { "months": [2, 6, 9], "precision": "month" },
+      "url": "https://www.nintendo.com/nintendo-direct/",
+      "note": "General Directs land Feb / Jun / Sep, announced only 1-2 days ahead."
+    },
+    {
+      "id": "nintendo-partner-showcase",
+      "series": "nintendo-partner",
+      "name": "Nintendo Partner / Indie World Showcase",
+      "brand": "Nintendo",
+      "category": "gaming",
+      "rule": { "months": [4, 8], "precision": "month" },
+      "url": "https://www.nintendo.com/nintendo-direct/"
+    },
+    {
+      "id": "state-of-play",
+      "series": "state-of-play",
+      "name": "PlayStation State of Play",
+      "brand": "PlayStation",
+      "category": "gaming",
+      "rule": { "months": [2, 6, 9], "precision": "month" },
+      "url": "https://blog.playstation.com/",
+      "note": "Sony announces these ~2 days out on the PlayStation Blog."
+    },
+    {
+      "id": "xbox-games-showcase",
+      "series": "xbox-showcase",
+      "name": "Xbox Games Showcase",
+      "brand": "Xbox",
+      "category": "gaming",
+      "rule": { "month": 6, "precision": "month" },
+      "url": "https://news.xbox.com/",
+      "note": "The big one, every June alongside Summer Game Fest."
+    },
+    {
+      "id": "xbox-developer-direct",
+      "series": "xbox-developer-direct",
+      "name": "Xbox Developer_Direct",
+      "brand": "Xbox",
+      "category": "gaming",
+      "rule": { "month": 1, "precision": "month" },
+      "url": "https://news.xbox.com/"
+    },
+    {
+      "id": "summer-game-fest",
+      "series": "summer-game-fest",
+      "name": "Summer Game Fest",
+      "brand": "Geoff Keighley",
+      "category": "gaming",
+      "rule": { "month": 6, "week": 1, "weekday": 5, "precision": "week" },
+      "url": "https://www.summergamefest.com/"
+    },
+    {
+      "id": "the-game-awards",
+      "series": "the-game-awards",
+      "name": "The Game Awards",
+      "brand": "Geoff Keighley",
+      "category": "gaming",
+      "rule": { "month": 12, "week": 2, "weekday": 4, "precision": "day" },
+      "url": "https://thegameawards.com/",
+      "note": "Second Thursday of December, and reliably full of reveals."
+    },
+    {
+      "id": "gamescom-onl",
+      "series": "gamescom",
+      "name": "gamescom · Opening Night Live",
+      "brand": "gamescom",
+      "category": "gaming",
+      "rule": { "month": 8, "week": 3, "weekday": 2, "spanDays": 5, "precision": "week" },
+      "url": "https://www.gamescom.global/en"
+    },
+    {
+      "id": "ubisoft-forward",
+      "series": "ubisoft-forward",
+      "name": "Ubisoft Forward",
+      "brand": "Ubisoft",
+      "category": "gaming",
+      "rule": { "month": 6, "precision": "month" },
+      "url": "https://www.ubisoft.com/"
+    },
+    {
+      "id": "gdc",
+      "series": "gdc",
+      "name": "Game Developers Conference",
+      "brand": "GDC",
+      "category": "gaming",
+      "rule": { "month": 3, "week": 3, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://gdconf.com/"
+    },
+
+    {
+      "id": "apple-september-event",
+      "series": "apple-september",
+      "name": "Apple September Event (iPhone)",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 9, "week": 2, "weekday": 2, "precision": "day" },
+      "url": "https://www.apple.com/apple-events/",
+      "note": "iPhone + Watch. Apple confirms it ~2 weeks out by press release."
+    },
+    {
+      "id": "apple-wwdc",
+      "series": "apple-wwdc",
+      "name": "Apple WWDC Keynote",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 6, "week": 2, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://developer.apple.com/wwdc/"
+    },
+    {
+      "id": "apple-october-event",
+      "series": "apple-october",
+      "name": "Apple October Event (Mac / iPad)",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://www.apple.com/apple-events/",
+      "note": "Not every year - Apple sometimes ships Macs by press release instead."
+    },
+    {
+      "id": "samsung-unpacked-flagship",
+      "series": "samsung-unpacked-s",
+      "name": "Samsung Galaxy Unpacked (S series)",
+      "brand": "Samsung",
+      "category": "mobile",
+      "rule": { "month": 1, "precision": "month" },
+      "url": "https://news.samsung.com/global/"
+    },
+    {
+      "id": "samsung-unpacked-fold",
+      "series": "samsung-unpacked-fold",
+      "name": "Samsung Galaxy Unpacked (Fold / Flip)",
+      "brand": "Samsung",
+      "category": "mobile",
+      "rule": { "month": 7, "precision": "month" },
+      "url": "https://news.samsung.com/global/"
+    },
+    {
+      "id": "xiaomi-mwc-launch",
+      "series": "xiaomi-global",
+      "name": "Xiaomi Global Launch (MWC)",
+      "brand": "Xiaomi",
+      "category": "mobile",
+      "rule": { "month": 3, "precision": "month" },
+      "url": "https://www.mi.com/global/",
+      "note": "Global flagship launch, timed to MWC Barcelona."
+    },
+    {
+      "id": "xiaomi-china-flagship",
+      "series": "xiaomi-china",
+      "name": "Xiaomi Flagship Launch (China)",
+      "brand": "Xiaomi",
+      "category": "mobile",
+      "rule": { "months": [2, 10], "precision": "month" },
+      "url": "https://www.mi.com/global/",
+      "note": "The China-first flagship + HyperOS reveal, months before global."
+    },
+    {
+      "id": "google-pixel-event",
+      "series": "google-pixel",
+      "name": "Made by Google (Pixel)",
+      "brand": "Google",
+      "category": "mobile",
+      "rule": { "month": 8, "precision": "month" },
+      "url": "https://blog.google/products/pixel/"
+    },
+    {
+      "id": "google-io",
+      "series": "google-io",
+      "name": "Google I/O",
+      "brand": "Google",
+      "category": "ai",
+      "rule": { "month": 5, "week": 2, "weekday": 2, "spanDays": 2, "precision": "week" },
+      "url": "https://io.google/"
+    },
+    {
+      "id": "ces",
+      "series": "ces",
+      "name": "CES",
+      "brand": "CTA",
+      "category": "tech",
+      "rule": { "month": 1, "day": 6, "spanDays": 4, "precision": "week" },
+      "url": "https://www.ces.tech/",
+      "note": "Las Vegas. Nvidia / AMD / Sony keynotes cluster on the eve."
+    },
+    {
+      "id": "mwc-barcelona",
+      "series": "mwc",
+      "name": "MWC Barcelona",
+      "brand": "GSMA",
+      "category": "mobile",
+      "rule": { "month": 3, "week": 1, "weekday": 1, "spanDays": 4, "precision": "week" },
+      "url": "https://www.mwcbarcelona.com/"
+    },
+    {
+      "id": "computex",
+      "series": "computex",
+      "name": "Computex Taipei",
+      "brand": "TAITRA",
+      "category": "tech",
+      "rule": { "month": 5, "week": -1, "weekday": 2, "spanDays": 4, "precision": "week" },
+      "url": "https://www.computextaipei.com.tw/"
+    },
+    {
+      "id": "ifa-berlin",
+      "series": "ifa",
+      "name": "IFA Berlin",
+      "brand": "IFA",
+      "category": "tech",
+      "rule": { "month": 9, "week": 1, "weekday": 5, "spanDays": 5, "precision": "week" },
+      "url": "https://www.ifa-berlin.com/"
+    },
+    {
+      "id": "snapdragon-summit",
+      "series": "snapdragon-summit",
+      "name": "Snapdragon Summit",
+      "brand": "Qualcomm",
+      "category": "mobile",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://www.qualcomm.com/snapdragon/summit",
+      "note": "The chip that lands in next year's Android flagships."
+    },
+
+    {
+      "id": "openai-devday",
+      "series": "openai-devday",
+      "name": "OpenAI DevDay",
+      "brand": "OpenAI",
+      "category": "ai",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://openai.com/devday/"
+    },
+    {
+      "id": "nvidia-gtc",
+      "series": "nvidia-gtc",
+      "name": "Nvidia GTC",
+      "brand": "Nvidia",
+      "category": "ai",
+      "rule": { "month": 3, "week": 3, "weekday": 1, "spanDays": 4, "precision": "week" },
+      "url": "https://www.nvidia.com/gtc/",
+      "note": "Jensen's keynote is where the next AI accelerator gets announced."
+    },
+    {
+      "id": "microsoft-build",
+      "series": "microsoft-build",
+      "name": "Microsoft Build",
+      "brand": "Microsoft",
+      "category": "ai",
+      "rule": { "month": 5, "week": 3, "weekday": 2, "spanDays": 3, "precision": "week" },
+      "url": "https://build.microsoft.com/"
+    },
+    {
+      "id": "google-cloud-next",
+      "series": "google-cloud-next",
+      "name": "Google Cloud Next",
+      "brand": "Google",
+      "category": "ai",
+      "rule": { "month": 4, "precision": "month" },
+      "url": "https://cloud.withgoogle.com/next"
+    },
+    {
+      "id": "meta-connect",
+      "series": "meta-connect",
+      "name": "Meta Connect",
+      "brand": "Meta",
+      "category": "ai",
+      "rule": { "month": 9, "week": 4, "weekday": 3, "spanDays": 2, "precision": "week" },
+      "url": "https://www.meta.com/connect/"
+    },
+    {
+      "id": "aws-reinvent",
+      "series": "aws-reinvent",
+      "name": "AWS re:Invent",
+      "brand": "AWS",
+      "category": "ai",
+      "rule": { "month": 12, "week": 1, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://reinvent.awsevents.com/"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ Lightweight **Node.js** Discord bot that posts **one daily digest** into **`#rel
 - 📺 **TV** airing on the selected day, on your services (TMDB)
 - 🎟️ **Coming to cinemas** — upcoming theatrical releases in your region (TMDB), e.g. *Spider-Man: Brand New Day*
 - 🎮 **Game releases** — recent + upcoming games. Works with **no API key** via Steam's public storefront (PC titles); add an optional free RAWG key for cross-platform coverage
+- 📡 **Showcase Radar** — a **separate** post for upcoming showcases: Nintendo Directs, PlayStation State of Play, Xbox showcases, Apple events, Xiaomi launches, Google I/O and the other AI keynotes — with countdown alerts a week, five days, a day and the morning before
 - 🗂️ **Filter buttons** underneath — tap **Anime / Movies / TV / Cinema / Games** to narrow the board to one category, so it never feels cluttered
 
 Anime and TV are day-bound and change with the calendar tab. Movies, cinema and
@@ -134,6 +135,107 @@ Three things worth knowing before you rely on it:
 
 Turn any of them off by trimming `CONTENT_TYPES` (`epic`, `gamepass`, `psplus`).
 
+### 3d. Showcase Radar (no key needed)
+
+Showcases get their **own message**, not a row on the release board. A Nintendo
+Direct three weeks out and the anime airing at 23:30 tonight are different kinds
+of information — one you diarise, one you watch — and folding the first into the
+second is how a Direct gets scrolled past.
+
+So there are two posts:
+
+| Post | When | What |
+|------|------|------|
+| **The board** | Once a day, `SHOWCASE_CRON` (09:30 by default) | Everything in the next `SHOWCASE_WINDOW_DAYS`, bucketed into *on now · this week · next 30 days · on the horizon* |
+| **The countdown** | Each time an event crosses a lead mark | One event, loudly: `## ⏰ 5 days out · PlayStation State of Play` |
+
+`SHOWCASE_LEAD_DAYS=7,5,1,0` fires four alerts per event — a week out to plan
+around, five days to clear the evening, the eve, and the morning of. Each mark
+fires **once**. It alerts on the *bucket* rather than the exact day, so an event
+still gets its warning if the bot was down on the day it crossed the mark.
+
+Also available on demand as **`/showcases`** (private by default;
+`share: true` posts it to the channel).
+
+#### Confirmed dates vs. the annual rhythm
+
+There is no API for "every showcase that will happen" — the events that matter
+most are announced **two days out on a company blog**. So the calendar in
+`config/showcases.json` holds two different kinds of knowledge, and the board
+never mixes them up:
+
+- **Confirmed** — someone announced a date. Drawn plainly (`Thu 24 Sep`), and
+  these are the **only** ones that fire countdown alerts. An alert on a guess is
+  worse than no alert.
+- **Expected** — the yearly pattern. There is always a September Apple event, so
+  the board can say `~mid Sep · expected` and you can plan around it. These roll
+  over on their own every year and are always drawn with a `~`.
+
+The moment a real date lands for a series, that month's estimate disappears
+instead of sitting next to it — including when the date is already **past**: a
+Direct that aired on the 9th is exactly why the board must stop promising one
+"around the 15th".
+
+An estimate also **never states more than it knows**. A month-level pattern is
+anchored to the middle of the month internally, but it is never rendered as
+"in 5 days" and never lands in *This week* — it reads `~mid Oct · expected next
+month`. Only a confirmed date counts days, because only a confirmed date has
+earned it.
+
+#### It picks up new announcements by itself
+
+Four open, keyless feeds are watched for showcases that were just announced:
+
+| Feed | Catches |
+|------|---------|
+| PlayStation Blog | State of Play, PlayStation Showcase |
+| Xbox Wire | Xbox Games Showcase, Developer_Direct, Partner Preview |
+| Apple Newsroom | "Apple special event" press releases |
+| Nintendo (YouTube channel feed) | Directs — the video title carries the date outright (`Nintendo Direct 9.12.2026`) |
+
+A match needs a real showcase phrase, not just a brand name, or a feed full of
+sale posts would fill the board with noise. When a date can be read out of the
+post it becomes a confirmed, alertable event; when it can't, the post still
+surfaces under **📣 Just announced** with its link, rather than inventing a day.
+
+**Discoveries are remembered, not just used.** These feeds are shallow — the
+PlayStation Blog publishes five times a day, so its feed holds about *one day*
+of posts, and a State of Play announced last Tuesday is invisible by Thursday.
+Every discovery is therefore written into `meta` and kept for 120 days, so a
+show that has already aired keeps suppressing predictions of itself long after
+the post announcing it scrolled away.
+
+Turn the feeds off with `SHOWCASE_FEEDS=false` to run on the curated file alone.
+
+#### Adding an event yourself
+
+Drop it in the `showcases` array of `config/showcases.json` — the file is
+re-read when it changes, so **no restart needed**:
+
+```json
+{
+  "id": "state-of-play-2026-09",
+  "series": "state-of-play",
+  "name": "PlayStation State of Play",
+  "brand": "PlayStation",
+  "category": "gaming",
+  "date": "2026-09-24",
+  "time": "23:00",
+  "timezone": "Asia/Kuala_Lumpur",
+  "confirmed": true,
+  "url": "https://blog.playstation.com/"
+}
+```
+
+`time` + `timezone` are optional; with them the countdown prints a Discord
+timestamp that reads in **each viewer's own zone**, which is the whole problem
+with a Japanese 07:00 stream. `category` is `gaming` / `tech` / `mobile` / `ai`
+and picks the emoji and colour. Preview the result with:
+
+```bash
+npm run preview:showcases          # add --no-feeds for the curated file alone
+```
+
 > The calendar and filter buttons work out of the box; they need **no extra Discord intents** (button clicks are delivered regardless).
 
 ### 4. Install & configure
@@ -144,6 +246,7 @@ copy .env.example .env
 # edit .env with notepad — fill DISCORD_TOKEN, DISCORD_CHANNEL_ID, TMDB_API_KEY
 npm install
 npm run preview   # print the digest to your terminal — no Discord, nothing posted
+npm run preview:showcases   # same, for the Showcase Radar board + countdowns
 npm start         # run the bot for real (connects + posts on schedule)
 ```
 
@@ -209,12 +312,15 @@ systemctl --user restart release-radar
 ```
 discord-release-radar/
 ├── config/services.json   # your streaming add-ons
+├── config/showcases.json  # showcase calendar: confirmed dates + annual rhythm
 ├── data/                  # SQLite (gitignored)
 ├── src/
 │   ├── index.js           # bot entry
 │   ├── config.js
 │   ├── db.js
 │   ├── notifier.js        # Discord embeds
+│   ├── showcaseNotifier.js # the showcase board + countdown alert messages
+│   ├── showcaseStore.js   # remembers feed-discovered showcases (feeds are shallow)
 │   ├── scheduler.js       # cron poll loop
 │   ├── interactions.js    # calendar + filter buttons → re-render in place
 │   ├── digestStore.js     # remembers posted digests so buttons can re-render
@@ -228,7 +334,9 @@ discord-release-radar/
 │   │   ├── rawg.js        # game releases (optional RAWG key)
 │   │   ├── epic.js        # Epic giveaways: free now + free next (no key)
 │   │   ├── gamepass.js    # Game Pass additions, by diffing the catalog (no key)
-│   │   └── psplus.js      # PS Plus monthly announcement, via the blog feed
+│   │   ├── psplus.js      # PS Plus monthly announcement, via the blog feed
+│   │   ├── showcases.js   # showcase calendar: confirmed + recurring, countdowns
+│   │   └── showcaseFeeds.js # newly announced showcases from official feeds
 │   └── utils/matchServices.js
 ├── .env.example
 └── package.json
@@ -244,7 +352,11 @@ discord-release-radar/
 4. Niche apps (Astro GO+, Sun NXT Lite, beIN) may have **incomplete** TMDB provider mapping — edit `config/services.json` match strings over time.
 5. Keep the droplet light: default poll is every **10 minutes**, capped TMDB pages, SQLite on disk.
 6. **Game Pass and Epic run on undocumented endpoints.** They're the same ones the storefronts themselves call, they need no key, and they can change without notice. Each section fails independently — if one breaks, the rest of the digest still posts.
-7. **PS Plus is an announcement, not a catalog.** Sony publishes no Plus API, so that section links the monthly post rather than listing its games.
+7. **Showcase dates are only as good as the announcement.** Nobody publishes a
+   feed of future showcases, so anything not yet announced is shown as the
+   yearly pattern with a `~` and never triggers an alert. Verify a date you add
+   by hand — the board will state it as fact.
+8. **PS Plus is an announcement, not a catalog.** Sony publishes no Plus API, so that section links the monthly post rather than listing its games.
 
 ---
 

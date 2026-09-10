@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "preview": "node scripts/preview.js"
+    "preview": "node scripts/preview.js",
+    "preview:showcases": "node scripts/previewShowcases.js"
   },
   "keywords": [
     "discord",

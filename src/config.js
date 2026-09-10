@@ -113,6 +113,45 @@ const config = {
    * for weeks at a time.
    */
   psPlusWindowDays: Number(process.env.PSPLUS_WINDOW_DAYS || 45),
+  /**
+   * Showcase Radar — Nintendo Directs, State of Plays, Apple events, the AI
+   * keynotes. Posted as its OWN message, not as a section of the daily board:
+   * a Direct three weeks out has nothing to do with what airs tonight, and
+   * burying it under today's anime is how you miss it.
+   */
+  showcasesEnabled:
+    String(process.env.SHOWCASES_ENABLED || "true").toLowerCase() !== "false",
+  /** Defaults to the digest channels when unset. */
+  showcaseChannelIds: list("SHOWCASE_CHANNEL_ID").length
+    ? list("SHOWCASE_CHANNEL_ID")
+    : list("DISCORD_CHANNEL_ID"),
+  /** How far ahead the board looks. */
+  showcaseWindowDays: Number(process.env.SHOWCASE_WINDOW_DAYS || 90),
+  /**
+   * Countdown alerts fire when an event crosses each of these day marks — a
+   * week out to start planning, five days to clear the evening, then the day
+   * before and the day itself. Each mark fires once per event.
+   */
+  showcaseLeadDays: list("SHOWCASE_LEAD_DAYS", "7,5,1,0")
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0)
+    .sort((a, b) => a - b),
+  /** Daily board post. Default 09:30 — just after the morning digest. */
+  showcaseCron: process.env.SHOWCASE_CRON || "30 9 * * *",
+  /**
+   * How often to check whether an event crossed a lead mark. Hourly, so a
+   * date announced this afternoon still gets its alert today.
+   */
+  showcaseAlertCron: process.env.SHOWCASE_ALERT_CRON || "5 * * * *",
+  /**
+   * Watch official blogs for newly announced showcases (no keys). This is what
+   * catches a State of Play announced two days out, which no annual rhythm can
+   * predict.
+   */
+  showcaseFeeds:
+    String(process.env.SHOWCASE_FEEDS || "true").toLowerCase() !== "false",
+  maxShowcases: Number(process.env.MAX_SHOWCASES || 18),
+
   services: servicesConfig.services,
   dataDir,
   dbPath: path.join(dataDir, "radar.db"),
