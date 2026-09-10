@@ -9,7 +9,7 @@ const {
 } = require("./db");
 const { sendDailyDigest, sendWeeklyOpsSummary } = require("./notifier");
 const { remember } = require("./digestStore");
-const { fetchAnimeForDayKey } = require("./providers/anilist");
+const { fetchAnimeForDayKey } = require("./providers/anime");
 const {
   fetchNewOnServices,
   fetchTvForDay,
@@ -48,14 +48,14 @@ async function collectBoard(opts = {}) {
 
   if (types.has("anime")) {
     try {
-      // AniList is a single cheap GraphQL call per day — fine in parallel.
+      // One cheap call per day against whichever source is up — fine in parallel.
       const days = await Promise.all(DAY_KEYS.map((key) => fetchAnimeForDayKey(key)));
       for (const items of days) {
         counts.anime += items.length;
         all.push(...items);
       }
     } catch (err) {
-      log.error("AniList fetch failed", err);
+      log.error("Anime fetch failed (all sources)", err);
     }
   }
 

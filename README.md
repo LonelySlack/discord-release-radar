@@ -76,7 +76,27 @@ For a **24/7 notifier on a small DigitalOcean droplet**, Node is a bit leaner an
 2. Settings → API → request a key  
 3. Use the **API Key (v3 auth)**
 
-AniList needs **no key**.
+AniList needs **no key** — and neither does the fallback below.
+
+#### Anime keeps working when AniList doesn't
+
+Anime comes from **AniList** first. AniList's API goes down for days at a time
+(most recently September 2026, answering every query with `403 — temporarily
+disabled due to severe stability issues`), and when it does, the anime section
+is the only part of the board that empties out.
+
+So the bot falls back to **[AnimeSchedule](https://animeschedule.net)**, whose
+`/api/v3/anime` endpoint is open and **needs no key either**. It carries the
+same things the board shows: air times, English/native titles, scores, genres,
+and real Crunchyroll / Netflix / Prime links.
+
+The one thing it can't give is a published per-episode number, so those are
+counted from the show's premiere and printed with a tilde — `~Ep 10/12`. A show
+that took a mid-season break drifts past its own episode count; rather than
+print a confidently wrong number, those rows fall back to `12 eps`.
+
+The bot re-checks AniList every 30 minutes and switches back on its own the
+moment it recovers. **There is nothing to configure and no key to add.**
 
 ### 3b. Games source (no key needed)
 
@@ -180,7 +200,7 @@ ls ~/logs/release-radar-weekly/
 systemctl --user restart release-radar
 ```
 
-**Security:** never commit `.env`. Prefer a firewall that only allows SSH. The bot only **outbound** HTTPS to Discord / AniList / TMDB — no inbound ports required.
+**Security:** never commit `.env`. Prefer a firewall that only allows SSH. The bot only **outbound** HTTPS to Discord / AniList / AnimeSchedule / TMDB — no inbound ports required.
 
 ---
 
@@ -199,7 +219,9 @@ discord-release-radar/
 │   ├── interactions.js    # calendar + filter buttons → re-render in place
 │   ├── digestStore.js     # remembers posted digests so buttons can re-render
 │   ├── providers/
+│   │   ├── anime.js       # dispatcher: AniList, falling back to AnimeSchedule
 │   │   ├── anilist.js     # anime airing schedule (per day, JP names)
+│   │   ├── animeschedule.js # key-free anime fallback when AniList is down
 │   │   ├── tmdb.js        # TV per day, streaming arrivals, cinema, watch regions
 │   │   ├── games.js       # dispatcher: picks steam (no key) or rawg
 │   │   ├── steam.js       # game releases via Steam public API (no key)
@@ -216,7 +238,7 @@ discord-release-radar/
 
 ## Notes / limits (honest)
 
-1. **Crunchyroll / Netflix / Disney+ have no official public “new drop” API** we can legally lean on long-term. We use **AniList + TMDB (+ JustWatch data via TMDB watch providers)**.
+1. **Crunchyroll / Netflix / Disney+ have no official public “new drop” API** we can legally lean on long-term — Crunchyroll in particular has no public API to get a key for, which is why the anime sources are AniList and AnimeSchedule rather than Crunchyroll itself. We use **AniList (→ AnimeSchedule) + TMDB (+ JustWatch data via TMDB watch providers)**.
 2. **Regional catalogs differ.** A Netflix MY title list ≠ Netflix US. That’s why embeds show **MY first**, then **other countries** where your brands carry it.
 3. **Anime** has the best “30 minutes before” timing. **Movies/TV** usually only have a **date**, not a precise clock — we notify when the data appears.
 4. Niche apps (Astro GO+, Sun NXT Lite, beIN) may have **incomplete** TMDB provider mapping — edit `config/services.json` match strings over time.
