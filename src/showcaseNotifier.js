@@ -10,6 +10,7 @@
  */
 const { EmbedBuilder } = require("discord.js");
 const config = require("./config");
+const { partitionSales, formatDay } = require("./providers/showcases");
 const { formatLocalDateLabel } = require("./time");
 
 /** Discord's own timestamp markup — every viewer reads it in their own zone. */
@@ -30,6 +31,36 @@ function showcaseLine(item) {
   return `\`${item.dateLabel}\` ${name} · ${bits.join(" · ")}`;
 }
 
+/**
+ * A sale line answers a different question. Nobody needs to know a sale started
+ * eleven days ago; they need to know whether it ends tonight. So a live sale
+ * leads with its deadline, and an upcoming one with how long the window is.
+ */
+function saleLine(item, opts = {}) {
+  const name = item.url ? `[${item.name}](${item.url})` : `**${item.name}**`;
+  const bits = [item.categoryEmoji];
+
+  if (item.live) {
+    const left = item.daysUntilEnd;
+    bits.push(
+      left <= 0
+        ? "**ends today**"
+        : left === 1
+          ? "**ends tomorrow**"
+          : `**${left} days left**`
+    );
+    if (left > 1) bits.push(`until ${formatDay(item.endDate)}`);
+  } else {
+    bits.push(item.countdown);
+  }
+
+  // Tagging every row "expected" in a list where nothing is confirmed is just
+  // noise — the `~` already says it. The tag earns its place only when a real,
+  // announced sale sits in the same list and needs telling apart.
+  if (!item.confirmed && opts.showExpected !== false) bits.push("_expected_");
+  return `\`${item.dateLabel}\` ${name} · ${bits.join(" · ")}`;
+}
+
 function chunkLines(lines, maxLen = 1000) {
   const chunks = [];
   let buf = [];
@@ -47,9 +78,9 @@ function chunkLines(lines, maxLen = 1000) {
   return chunks;
 }
 
-function groupFields(name, items, emoji) {
+function groupFields(name, items, emoji, render = showcaseLine) {
   if (!items.length) return [];
-  const chunks = chunkLines(items.map(showcaseLine));
+  const chunks = chunkLines(items.map(render));
   const heading = `${emoji} ${name} (${items.length})`;
   return chunks.map((value, i) => ({
     name: chunks.length > 1 ? `${heading} · ${i + 1}/${chunks.length}` : heading,
@@ -88,13 +119,21 @@ function bucket(items) {
  * @param {object[]} [announcements] posts with no readable date
  */
 function buildShowcaseBoard(items, announcements = []) {
-  const capped = items.slice(0, config.maxShowcases);
+  // Two budgets, not one. November has a Black Friday sale on five storefronts
+  // at once, and a shared cap would let them push every Direct off the board.
+  const { events, sales } = partitionSales(items);
+  const capped = events.slice(0, config.maxShowcases);
+  const cappedSales = sales.slice(0, config.maxSales);
   const groups = bucket(capped);
-  const confirmed = capped.filter((i) => i.confirmed).length;
+  const liveSales = cappedSales.filter((i) => i.live);
+  const soonSales = cappedSales.filter((i) => !i.live);
+  const confirmed = [...capped, ...cappedSales].filter((i) => i.confirmed).length;
 
   const embed = new EmbedBuilder()
     .setTitle("📡 Showcase Radar · what's coming")
-    .setColor(groups.week[0]?.color ?? groups.now[0]?.color ?? 0x5865f2)
+    .setColor(
+      groups.week[0]?.color ?? groups.now[0]?.color ?? liveSales[0]?.color ?? 0x5865f2
+    )
     .setTimestamp(new Date())
     .setFooter({
       text: `${config.showcaseWindowDays}-day horizon · alerts at ${config.showcaseLeadDays
@@ -106,10 +145,14 @@ function buildShowcaseBoard(items, announcements = []) {
 
   const lines = [
     `**${formatLocalDateLabel(config.timezone)}**`,
-    `📅 **${capped.length}** on the radar · ✅ **${confirmed}** with a confirmed date`,
+    `📅 **${capped.length}** on the radar · 🏷️ **${cappedSales.length}** store sales · ` +
+      `✅ **${confirmed}** with a confirmed date`,
   ];
   if (groups.now.length) {
     lines.push(`🔴 **${groups.now.length}** happening right now`);
+  }
+  if (liveSales.length) {
+    lines.push(`🏷️ **${liveSales.length}** sales live right now`);
   }
   lines.push(
     "_A `~` date is the yearly pattern, not an announcement — countdown alerts only fire for confirmed dates._"
@@ -121,6 +164,10 @@ function buildShowcaseBoard(items, announcements = []) {
     ...groupFields("This week", groups.week, "🔥"),
     ...groupFields("Next 30 days", groups.month, "🗓️"),
     ...groupFields("On the horizon", groups.horizon, "🔭"),
+    // Sales sit below the events on purpose: an event is a time you have to be
+    // somewhere, a sale is a window you get to choose a moment inside.
+    ...groupFields("On sale now", liveSales, "🏷️", saleLine),
+    ...groupFields("Sales coming up", soonSales, "🏷️", saleLine),
   ];
 
   if (announcements.length) {
@@ -138,6 +185,76 @@ function buildShowcaseBoard(items, announcements = []) {
     fields.push({
       name: "🔭 Nothing on the radar",
       value: `_No showcases in the next ${config.showcaseWindowDays} days._`,
+      inline: false,
+    });
+  }
+
+  embed.addFields(fields.slice(0, 25));
+  return embed;
+}
+
+/**
+ * `/sales` — the sale calendar on its own, a year deep.
+ *
+ * The daily board stops at 90 days, which is right for a Direct and wrong for a
+ * sale: "should I buy this now or wait for the Summer Sale" is a question asked
+ * in September about June. So this one looks a full year ahead, and buckets by
+ * whether you can act today, soon, or only note it down.
+ *
+ * @param {object[]} sales normalized sale items, soonest first
+ * @param {object} [opts]
+ * @param {string} [opts.store] only this storefront
+ * @param {number} [opts.windowDays] how far ahead this list actually looked
+ */
+function buildSalesBoard(sales, opts = {}) {
+  const store = (opts.store || "").trim();
+  const windowDays = opts.windowDays || config.saleWindowDays;
+  const matching = store
+    ? sales.filter(
+        (i) =>
+          String(i.brand || "").toLowerCase().includes(store.toLowerCase()) ||
+          String(i.name || "").toLowerCase().includes(store.toLowerCase())
+      )
+    : sales;
+
+  const live = matching.filter((i) => i.live);
+  const soon = matching.filter((i) => !i.live && i.daysUntil <= 30);
+  const later = matching.filter((i) => !i.live && i.daysUntil > 30);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🏷️ Game sale calendar${store ? ` · ${store}` : ""}`)
+    .setColor(live.length ? 0xe67e22 : 0x5865f2)
+    .setTimestamp(new Date())
+    .setFooter({
+      text: `${Math.round(windowDays / 30)}-month horizon · dates are the yearly pattern until a store confirms`,
+    });
+
+  const lines = [`**${formatLocalDateLabel(config.timezone)}**`];
+  if (live.length) {
+    lines.push(`🟢 **${live.length}** on right now · **${matching.length}** in the window`);
+  } else {
+    lines.push(`📅 **${matching.length}** sales in the next ${Math.round(windowDays / 30)} months`);
+  }
+  lines.push(
+    "_A `~` window is where the sale has landed every year, not an announcement. " +
+      "Stores confirm about a week out._"
+  );
+  embed.setDescription(lines.join("\n"));
+
+  const anyConfirmed = matching.some((i) => i.confirmed);
+  const render = (item) => saleLine(item, { showExpected: anyConfirmed });
+  const fields = [
+    ...groupFields("On sale now", live, "🟢", render),
+    ...groupFields("Starting within 30 days", soon, "🔥", render),
+    ...groupFields("Later in the year", later, "🗓️", render),
+  ];
+
+  if (!fields.length) {
+    fields.push({
+      name: "🔭 Nothing found",
+      value: store
+        ? `_No sales listed for **${store}**. Try /sales with no store._`
+        : "_No sales in the catalog window._",
       inline: false,
     });
   }
@@ -204,6 +321,8 @@ async function sendShowcaseAlert(channel, item, lead) {
 
 module.exports = {
   buildShowcaseBoard,
+  buildSalesBoard,
+  saleLine,
   buildShowcaseAlert,
   sendShowcaseBoard,
   sendShowcaseAlert,

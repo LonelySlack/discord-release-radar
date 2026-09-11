@@ -52,6 +52,7 @@ For a **24/7 notifier on a small DigitalOcean droplet**, Node is a bit leaner an
 - SQLite dedupe so you don’t get the same alert twice
 - Your service list lives in `config/services.json` (Netflix, Disney+, Prime, HBO Max, Viu, iQIYI, Crunchyroll, Sun NXT, beIN, Astro, …)
 - **Free & Subs** tab: Epic Games giveaways, new arrivals on Game Pass, and PlayStation Plus announcements — all keyless
+- **Sale calendar**: every seasonal storefront sale (Steam, PlayStation, Xbox, eShop, GOG, Epic) on the Showcase Radar, plus **`/sales`** for a full year ahead
 
 ---
 
@@ -155,7 +156,7 @@ fires **once**. It alerts on the *bucket* rather than the exact day, so an event
 still gets its warning if the bot was down on the day it crossed the mark.
 
 Also available on demand as **`/showcases`** (private by default;
-`share: true` posts it to the channel).
+`share: true` posts it to the channel), and **`/sales`** for the sale calendar.
 
 #### Confirmed dates vs. the annual rhythm
 
@@ -207,6 +208,41 @@ the post announcing it scrolled away.
 
 Turn the feeds off with `SHOWCASE_FEEDS=false` to run on the curated file alone.
 
+#### Game store sales
+
+The seasonal sales live in the same catalog, under `recurring` with
+`"category": "sale"`, and they get **their own section** at the bottom of the
+board. A sale is a different kind of fact from a showcase: an event is a time you
+have to be somewhere, a sale is a window you choose a moment inside — so the row
+leads with the **deadline**, not the start.
+
+```
+🏷️ On sale now (2)
+`~18 Dec–5 Jan` Steam Winter Sale · 🏷️ · **3 days left** · until Tue 5 Jan
+`~18 Dec–8 Jan` Epic Holiday Sale (+ free game a day) · 🏷️ · **6 days left** · until Fri 8 Jan
+```
+
+Covered: **Steam** (Spring / Summer / Autumn / Winter, plus Next Fest),
+**PlayStation Store** (Days of Play / Black Friday / Holiday), **Xbox** (Spring /
+Ultimate Game Sale / Black Friday / Countdown), **Nintendo eShop** (MAR10 Day /
+Summer / Cyber Deals / Big Holiday), **GOG** (Spring / Summer / Black Friday /
+Big Winter) and **Epic** (Mega / Summer / Black Friday / Holiday).
+
+Every one of them is an **estimate**, filed under `recurring` on purpose: no
+storefront publishes its sale calendar, and they confirm about a week out. So the
+dates are where the sale has actually landed the last few years, always drawn
+with a `~`, and they **never fire countdown alerts**. When a store does announce,
+add it to `showcases` with the real dates — then it alerts like anything else.
+
+Two caps, not one, because November has a Black Friday sale on five storefronts
+at once and a shared budget would push every Direct off the board:
+`MAX_SHOWCASES=18` for events, `MAX_SALES=10` for sales.
+
+**`/sales`** is the whole calendar, a year deep (`SALE_WINDOW_DAYS=365`) —
+because "should I buy this now or wait for the Summer Sale" is a question asked
+in September about June, and the 90-day board cannot answer it. `store: Steam`
+narrows it to one storefront; private unless `share: true`.
+
 #### Adding an event yourself
 
 Drop it in the `showcases` array of `config/showcases.json` — the file is
@@ -229,8 +265,12 @@ re-read when it changes, so **no restart needed**:
 
 `time` + `timezone` are optional; with them the countdown prints a Discord
 timestamp that reads in **each viewer's own zone**, which is the whole problem
-with a Japanese 07:00 stream. `category` is `gaming` / `tech` / `mobile` / `ai`
-and picks the emoji and colour. Preview the result with:
+with a Japanese 07:00 stream. `category` is `gaming` / `tech` / `mobile` / `ai` /
+`sale` and picks the emoji, colour, and which section of the board it lands in.
+For anything that runs more than a day, `endDate` on a confirmed entry or
+`spanDays` on a recurring rule keeps it on the board until its **last** day —
+`spanDays` counts the first day, so CES's `{ "day": 6, "spanDays": 4 }` is 6–9
+Jan. Preview the result with:
 
 ```bash
 npm run preview:showcases          # add --no-feeds for the curated file alone

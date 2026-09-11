@@ -3,8 +3,10 @@ const { buildDigestPage, buildBoardRows, FILTERS } = require("./notifier");
 const { isDayKey, DAY_KEYS } = require("./time");
 const { recall } = require("./digestStore");
 const { createWheel, handleWheelButton, handleAddModal } = require("./wheel");
-const { buildShowcaseBoard } = require("./showcaseNotifier");
+const { buildShowcaseBoard, buildSalesBoard } = require("./showcaseNotifier");
+const { collectShowcases, partitionSales } = require("./providers/showcases");
 const { collectShowcaseBoard } = require("./scheduler");
+const config = require("./config");
 const log = require("./logger");
 
 /**
@@ -26,6 +28,25 @@ async function showShowcases(interaction) {
 }
 
 /**
+ * `/sales` — the sale calendar, a year deep. Reads the catalog straight rather
+ * than going through the board: no feeds to wait on, because no storefront
+ * announces its seasonal sale anywhere this code can read it.
+ */
+async function showSales(interaction) {
+  const share = interaction.options.getBoolean("share") ?? false;
+  const store = interaction.options.getString("store") || "";
+  const { sales } = partitionSales(
+    collectShowcases({ windowDays: config.saleWindowDays })
+  );
+
+  await interaction.reply({
+    content: share ? "## 🏷️ Game sale calendar" : undefined,
+    embeds: [buildSalesBoard(sales, { store, windowDays: config.saleWindowDays })],
+    flags: share ? undefined : MessageFlags.Ephemeral,
+  });
+}
+
+/**
  * Wire up the digest's calendar strip, category tabs and page arrows. Every
  * click edits the board in place (interaction.update) — no new messages, so the
  * channel keeps exactly one digest per slot no matter how much someone clicks
@@ -43,6 +64,9 @@ function registerInteractions(client) {
         interaction.commandName === "showcases"
       ) {
         return await showShowcases(interaction);
+      }
+      if (interaction.isChatInputCommand() && interaction.commandName === "sales") {
+        return await showSales(interaction);
       }
       if (interaction.isButton() && interaction.customId.startsWith("wheel:")) {
         return await handleWheelButton(interaction);

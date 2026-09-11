@@ -151,6 +151,14 @@ const config = {
   showcaseFeeds:
     String(process.env.SHOWCASE_FEEDS || "true").toLowerCase() !== "false",
   maxShowcases: Number(process.env.MAX_SHOWCASES || 18),
+  /**
+   * Storefront sales get their own budget on the board. Sharing one cap with
+   * the events doesn't work: November alone has Black Friday sales on five
+   * stores, and they would push every Direct and keynote off the board.
+   */
+  maxSales: Number(process.env.MAX_SALES || 10),
+  /** How far `/sales` looks ahead — a year, so next summer is answerable now. */
+  saleWindowDays: Number(process.env.SALE_WINDOW_DAYS || 365),
 
   services: servicesConfig.services,
   dataDir,

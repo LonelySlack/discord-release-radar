@@ -1,6 +1,8 @@
 /**
  * Upcoming tech and gaming showcases — Nintendo Directs, State of Plays, Xbox
- * showcases, Apple events, Xiaomi launches, the AI keynotes.
+ * showcases, Apple events, Xiaomi launches, the AI keynotes — and the storefront
+ * sales (Steam Summer, eShop holiday, GOG winter) that run on the same kind of
+ * yearly clock.
  *
  * This is deliberately NOT an API. Nobody publishes a machine-readable feed of
  * "every showcase that will happen", and the events that matter most are
@@ -28,6 +30,9 @@ const CATEGORIES = {
   tech: { emoji: "💻", label: "Tech", color: 0x5865f2 },
   mobile: { emoji: "📱", label: "Mobile", color: 0xeb459e },
   ai: { emoji: "🤖", label: "AI", color: 0xfee75c },
+  // Sales are shopping, not watching: a two-week window you buy inside, with a
+  // deadline instead of a start time. They get their own section on the board.
+  sale: { emoji: "🏷️", label: "Store sale", color: 0xe67e22 },
 };
 
 function categoryMeta(key) {
@@ -93,6 +98,20 @@ function ruleDate(rule, year, month) {
   return ymd(year, month, 15);
 }
 
+/**
+ * A rule's last day. `spanDays` is the number of days the thing runs, counting
+ * the first — CES's `{day: 6, spanDays: 4}` is 6-9 Jan. Without this every
+ * multi-day entry was a one-day entry: gamescom fell off the board the morning
+ * after it opened, and a 19-day Steam sale would have vanished on day two.
+ */
+function ruleEndDate(rule, startYmd) {
+  const span = Number(rule.spanDays);
+  if (!Number.isFinite(span) || span <= 1) return startYmd;
+  const [y, m, d] = startYmd.split("-").map(Number);
+  const end = new Date(Date.UTC(y, m - 1, d + span - 1));
+  return ymd(end.getUTCFullYear(), end.getUTCMonth() + 1, end.getUTCDate());
+}
+
 function ruleMonths(rule) {
   if (Array.isArray(rule.months) && rule.months.length) return rule.months;
   return [rule.month].filter(Number.isFinite);
@@ -100,20 +119,33 @@ function ruleMonths(rule) {
 
 /**
  * Every occurrence of a recurring entry from today out to the window's end.
- * Walks this year and the next two so a January event still shows up when the
- * window is opened in December.
+ * Walks the next two years so a January event still shows up when the window is
+ * opened in December — and LAST year too, because a run that started in the old
+ * year can still be on in this one: the Steam Winter Sale opens 18 Dec and ends
+ * 5 Jan, and on 2 Jan the only occurrence that describes it belongs to a year
+ * that has already ended. Anything genuinely finished is dropped just below.
  */
 function occurrencesFor(entry, todayYmd, horizonYmd) {
   const rule = entry.rule || {};
   const startYear = Number(todayYmd.slice(0, 4));
   const out = [];
 
-  for (let year = startYear; year <= startYear + 2; year += 1) {
+  for (let year = startYear - 1; year <= startYear + 2; year += 1) {
     for (const month of ruleMonths(rule)) {
       const date = ruleDate(rule, year, month);
-      if (daysBetweenYmd(todayYmd, date) < 0) continue;
+      const endDate = ruleEndDate(rule, date);
+      // A run that started before today is still on; one that has finished is
+      // not. Comparing the END date is what keeps a live event on the board.
+      if (daysBetweenYmd(todayYmd, endDate) < 0) continue;
       if (daysBetweenYmd(date, horizonYmd) < 0) continue;
-      out.push({ ...entry, date, confirmed: false, occurrenceYear: year, month });
+      out.push({
+        ...entry,
+        date,
+        endDate,
+        confirmed: false,
+        occurrenceYear: year,
+        month,
+      });
     }
   }
   return out;
@@ -154,6 +186,16 @@ function dateLabel(item) {
     return start;
   }
   const precision = item.rule?.precision || "month";
+  // A sale is bought inside, so both ends matter — "week of 26 Jun" doesn't tell
+  // you whether you still have the weekend. Months stay vague on purpose.
+  if (item.isSale && precision !== "month" && item.endDate !== item.date) {
+    // Same month, so the month is said once: "~11-18 Mar", not "~11 Mar-18 Mar".
+    const sameMonth = item.date.slice(0, 7) === item.endDate.slice(0, 7);
+    const start = sameMonth
+      ? String(Number(item.date.slice(8, 10)))
+      : formatDay(item.date, false);
+    return `~${start}–${formatDay(item.endDate, false)}`;
+  }
   if (precision === "day") return `~${formatDay(item.date)}`;
   if (precision === "week") return `~week of ${formatDay(item.date, false)}`;
   return `~${formatMonthish(item.date)}`;
@@ -229,11 +271,15 @@ function normalize(entry, todayYmd) {
     id: entry.occurrenceYear ? `${entry.id}-${entry.occurrenceYear}-${entry.month}` : entry.id,
     seriesId: entry.series || entry.id,
     category: entry.category || "tech",
+    isSale: entry.category === "sale",
     categoryEmoji: meta.emoji,
     categoryLabel: meta.label,
     color: meta.color,
     endDate,
     daysUntil,
+    // The deadline. For a sale this is the number that decides anything: a
+    // discount you hear about on its last day is nearly a discount you missed.
+    daysUntilEnd: daysBetweenYmd(todayYmd, endDate),
     // A confirmed entry states a day; an estimate states only what its rule
     // knows. Everything downstream — wording, bucketing — keys off this.
     datePrecision: entry.confirmed ? "day" : entry.rule?.precision || "month",
@@ -253,11 +299,17 @@ function normalize(entry, todayYmd) {
  * @param {object} [opts]
  * @param {object[]} [opts.extra] feed-discovered events to fold in
  * @param {Date} [opts.now]
+ * @param {number} [opts.windowDays] look further than the board's horizon —
+ *   `/sales` uses a full year, because "when is the next Summer Sale" is a
+ *   question about June asked in September.
  */
 function collectShowcases(opts = {}) {
   const now = opts.now || new Date();
   const todayYmd = localYmd(config.timezone, now);
-  const horizon = new Date(now.getTime() + config.showcaseWindowDays * 86400000);
+  const windowDays = Number.isFinite(opts.windowDays)
+    ? opts.windowDays
+    : config.showcaseWindowDays;
+  const horizon = new Date(now.getTime() + windowDays * 86400000);
   const horizonYmd = localYmd(config.timezone, horizon);
 
   const catalog = loadCatalog();
@@ -298,6 +350,17 @@ function collectShowcases(opts = {}) {
   return items;
 }
 
+/**
+ * Events and sales, told apart. The board renders them in separate sections:
+ * "in 5 days" is the whole story for a Direct, and half of it for a sale.
+ */
+function partitionSales(items) {
+  return {
+    events: items.filter((i) => !i.isSale),
+    sales: items.filter((i) => i.isSale),
+  };
+}
+
 /** Only the ones a countdown alert is allowed to fire for. */
 function alertableShowcases(items) {
   return items.filter((i) => i.confirmed && i.daysUntil >= 0);
@@ -306,6 +369,7 @@ function alertableShowcases(items) {
 module.exports = {
   collectShowcases,
   alertableShowcases,
+  partitionSales,
   categoryMeta,
   countdownLabel,
   dateLabel,
