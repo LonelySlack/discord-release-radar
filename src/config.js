@@ -166,7 +166,7 @@ const config = {
   weeklyLogDir: process.env.WEEKLY_LOG_DIR || defaultWeeklyLogDir,
 
   // Caps so digests stay readable on a small droplet
-  maxAnime: Number(process.env.MAX_ANIME || 25),
+  maxAnime: Number(process.env.MAX_ANIME || 40),
   maxMovies: Number(process.env.MAX_MOVIES || 12),
   maxTv: Number(process.env.MAX_TV || 15),
   maxCinema: Number(process.env.MAX_CINEMA || 10),

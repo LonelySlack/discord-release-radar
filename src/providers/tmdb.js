@@ -12,7 +12,15 @@ async function tmdb(path, params = {}) {
     if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
   }
 
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    // A one-off network blip used to blank a whole section of the digest
+    // (no movies on 12 and 13 Oct); one retry a few seconds later covers it.
+    await new Promise((r) => setTimeout(r, 3000));
+    res = await fetch(url);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`TMDB ${path} HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -348,6 +356,8 @@ function sleep(ms) {
 }
 
 module.exports = {
+  tmdb,
+  fetchWatchProviders,
   fetchNewOnServices,
   fetchTvForDay,
   fetchUpcomingCinema,

@@ -1,6 +1,7 @@
 const log = require("../logger");
 const anilist = require("./anilist");
 const animeschedule = require("./animeschedule");
+const { addAnimeRegions } = require("./animeRegions");
 
 /**
  * Anime, from whichever schedule source is actually up.
@@ -59,7 +60,7 @@ async function fetchAnimeForDayKey(dayKey) {
         });
         preferred = index;
       }
-      return items;
+      return await addAnimeRegions(items);
     } catch (err) {
       errors.push(`${source.name}: ${err.message}`);
       log.error(`anime source failed (${source.name})`, err);

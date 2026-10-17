@@ -180,6 +180,12 @@ async function fetchOne(source, now) {
       headers: { "user-agent": UA },
       signal: controller.signal,
     });
+    if (res.status === 404 && source.key === "nintendo") {
+      // YouTube's channel feeds 404 now and then for a channel that is fine;
+      // the next hourly run picks it up, so this isn't worth an error.
+      log.warn(`showcase feed 404 (${source.key}), retrying next run`);
+      return { events: [], announcements: [] };
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     xml = await res.text();
   } catch (err) {
