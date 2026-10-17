@@ -120,9 +120,19 @@ function shortWhere(item) {
     return item.providerHints?.[0] || null;
   }
 
-  // Anime: AniList names the real services. One is enough on a single line.
-  if (item.watchLinks?.length) return item.watchLinks[0].site;
-  if (item.providerHints?.length) return item.providerHints[0];
+  // Anime: a free Asia YouTube channel beats everything, then what streams in
+  // MY, then the country it streams in (worth a VPN), then AniList's own pick
+  // when TMDB couldn't say where it plays.
+  if (item.kind === "anime") {
+    const free = item.watchLinks?.find((l) => l.freeAsia);
+    if (free) return free.site;
+    if (!item.availability) {
+      return item.watchLinks?.[0]?.site || item.providerHints?.[0] || null;
+    }
+  } else {
+    if (item.watchLinks?.length) return item.watchLinks[0].site;
+    if (item.providerHints?.length) return item.providerHints[0];
+  }
 
   if (item.availability) {
     const { onPrimary, primaryServices, otherRegions } = item.availability;
@@ -139,7 +149,8 @@ function shortWhere(item) {
 
 /** The flag that tells you at a glance whether it's watchable from here. */
 function whereFlag(item) {
-  if (item.kind !== "movie" && item.kind !== "tv") return "";
+  if (item.kind !== "movie" && item.kind !== "tv" && item.kind !== "anime") return "";
+  if (item.kind === "anime" && item.watchLinks?.some((l) => l.freeAsia)) return "🇲🇾 ";
   if (!item.availability) return "";
   return item.availability.onPrimary ? "🇲🇾 " : "🌍 ";
 }

@@ -41,6 +41,8 @@ const insertNotif = db.prepare(`
 
 const hasNotif = db.prepare(`SELECT 1 FROM notifications WHERE id = ?`);
 
+const deleteNotif = db.prepare(`DELETE FROM notifications WHERE id = ?`);
+
 const setMeta = db.prepare(`
   INSERT INTO meta (key, value) VALUES (@key, @value)
   ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -69,6 +71,15 @@ function markNotified(id, kind, title) {
     notified_at: Date.now(),
   });
   return result.changes > 0;
+}
+
+/**
+ * Undo a claim. markNotified doubles as a lock — it only reports a change the
+ * first time — so a job that claims its slot and then fails to deliver has to
+ * hand the slot back, or it silently skips itself until tomorrow.
+ */
+function clearNotified(id) {
+  deleteNotif.run(id);
 }
 
 function getMetaValue(key, fallback = null) {
@@ -119,6 +130,7 @@ function getRecentPolls(limit = 14) {
 module.exports = {
   alreadyNotified,
   markNotified,
+  clearNotified,
   getMetaValue,
   setMetaValue,
   digestAlreadySent,

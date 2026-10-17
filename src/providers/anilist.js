@@ -4,6 +4,9 @@ const log = require("../logger");
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
+/** YouTube channels that stream anime free to Southeast Asia, MY included. */
+const FREE_ASIA_CHANNEL = /muse asia|ani-one asia|tropics anime asia/i;
+
 async function anilistQuery(query, variables = {}) {
   const res = await fetch(ANILIST_URL, {
     method: "POST",
@@ -76,7 +79,7 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
             averageScore
             coverImage { large color }
             title { romaji english native }
-            externalLinks { site url }
+            externalLinks { site url notes }
           }
         }
       }
@@ -115,15 +118,22 @@ async function fetchAnimeForDay(dayKey, date = new Date()) {
       // AniList hands us real per-show watch URLs (Crunchyroll, Netflix, …).
       // Keep the url alongside the name so the digest can link straight to the
       // episode's page instead of only naming the service.
+      // A YouTube link's notes name the channel. The Asia licensors stream
+      // free and legally in MY, so they're labelled as such and listed first.
       const streamingLinks = (media.externalLinks || [])
         .filter(
           (l) =>
             l.url &&
-            /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|bilibili|youtube/i.test(
+            /crunchyroll|netflix|disney|prime|hbo|max|viu|iqiyi|^iq$|bilibili|youtube|tencent|wetv|hulu|tubi|oceanveil/i.test(
               l.site || ""
             )
         )
-        .map((l) => ({ site: l.site, url: l.url }));
+        .map((l) =>
+          /youtube/i.test(l.site) && FREE_ASIA_CHANNEL.test(l.notes || "")
+            ? { site: `${l.notes} (free)`, url: l.url, freeAsia: true }
+            : { site: l.site === "iQ" ? "iQIYI" : l.site, url: l.url }
+        )
+        .sort((a, b) => Boolean(b.freeAsia) - Boolean(a.freeAsia));
 
       // AniList often lists a service twice (channel + playlist) — keep the
       // first URL per service so the digest never reads "YouTube · YouTube".

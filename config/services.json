@@ -12,6 +12,10 @@
     { "id": "bein", "label": "beIN SPORTS CONNECT", "match": ["beIN", "beIN SPORTS"] },
     { "id": "astro", "label": "Astro GO+", "match": ["Astro"] },
     { "id": "apple", "label": "Apple TV+", "match": ["Apple TV"] },
-    { "id": "youtube", "label": "YouTube", "match": ["YouTube"] }
+    { "id": "youtube", "label": "YouTube", "match": ["YouTube"] },
+    { "id": "bilibili", "label": "Bilibili", "match": ["Bilibili"] },
+    { "id": "hulu", "label": "Hulu", "match": ["Hulu"] },
+    { "id": "paramount", "label": "Paramount+", "match": ["Paramount Plus", "Paramount+"] },
+    { "id": "peacock", "label": "Peacock", "match": ["Peacock"] }
   ]
 }

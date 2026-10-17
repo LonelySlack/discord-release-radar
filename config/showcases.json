@@ -1,0 +1,592 @@
+{
+  "_readme": [
+    "Two lists feed the Showcase Radar.",
+    "",
+    "`showcases` — events with a DATE SOMEONE ANNOUNCED. These are the only ones",
+    "that fire countdown alerts, because an alert is a promise that the thing is",
+    "really happening on that day. Add one the moment a date goes public.",
+    "",
+    "`recurring` — the annual rhythm. Nobody has announced Nintendo's September",
+    "Direct yet, but there is always one, so the board can still say 'expected",
+    "mid Sep' and you can plan around it. These roll over on their own every",
+    "year and are always drawn with a ~ so nobody mistakes them for a real date.",
+    "",
+    "A `showcases` entry supersedes any `recurring` entry sharing its `series`",
+    "in the same month — so when a date is announced, the estimate disappears",
+    "instead of sitting next to it. This works for dates that have ALREADY",
+    "PASSED too, and that is the point: once September's State of Play has",
+    "aired, adding it here is what stops the board predicting another one.",
+    "",
+    "Rule shapes: {month|months, day} for a fixed date, or {month|months, week,",
+    "weekday} for 'second Thursday' (weekday 0=Sun..6=Sat, week -1 = last).",
+    "`precision` says how loudly to state it: day | week | month.",
+    "`spanDays` is how many days it runs, counting the first: CES's {day 6,",
+    "spanDays 4} is 6-9 Jan. A run stays on the board until its LAST day.",
+    "",
+    "`category` picks the emoji and where it lands: gaming | tech | mobile | ai,",
+    "plus `sale` for storefront sales, which get their own board section because",
+    "what you need from a sale is the deadline, not the start time. Sale dates",
+    "below are the historical pattern, not announcements - Valve and co. confirm",
+    "roughly a week out, which is why they all live under `recurring`. When a",
+    "store does announce, add it to `showcases` with the real dates and it will",
+    "start firing countdown alerts."
+  ],
+
+  "showcases": [
+    {
+      "id": "tgs-2026",
+      "series": "tgs",
+      "name": "Tokyo Game Show 2026",
+      "brand": "CESA",
+      "category": "gaming",
+      "date": "2026-09-17",
+      "endDate": "2026-09-21",
+      "confirmed": true,
+      "url": "https://tgs.cesa.or.jp/en/",
+      "note": "Makuhari Messe. Runs Thu 17 - Mon 21 Sep."
+    },
+    {
+      "id": "state-of-play-2026-09",
+      "series": "state-of-play",
+      "name": "PlayStation State of Play (September)",
+      "brand": "PlayStation",
+      "category": "gaming",
+      "date": "2026-09-03",
+      "confirmed": true,
+      "url": "https://blog.playstation.com/category/state-of-play/",
+      "note": "Already aired - kept so the board stops predicting a September one."
+    }
+  ],
+
+  "recurring": [
+    {
+      "id": "steam-spring-sale",
+      "series": "steam-spring",
+      "name": "Steam Spring Sale",
+      "brand": "Steam",
+      "category": "sale",
+      "rule": { "month": 3, "week": 2, "weekday": 4, "spanDays": 8, "precision": "week" },
+      "url": "https://store.steampowered.com/",
+      "note": "Valve's seasonal sale. 2025 ran 13-20 Mar, 2024 14-21 Mar."
+    },
+    {
+      "id": "steam-summer-sale",
+      "series": "steam-summer",
+      "name": "Steam Summer Sale",
+      "brand": "Steam",
+      "category": "sale",
+      "rule": { "month": 6, "week": -1, "weekday": 4, "spanDays": 15, "precision": "week" },
+      "url": "https://store.steampowered.com/",
+      "note": "The big one: two weeks from the last Thursday of June. 2025 ran 26 Jun-10 Jul, 2024 27 Jun-11 Jul."
+    },
+    {
+      "id": "steam-autumn-sale",
+      "series": "steam-autumn",
+      "name": "Steam Autumn Sale",
+      "brand": "Steam",
+      "category": "sale",
+      "rule": { "month": 11, "day": 25, "spanDays": 8, "precision": "week" },
+      "url": "https://store.steampowered.com/",
+      "note": "Steam's Black Friday week. 2025 ran 24 Nov-1 Dec, 2024 27 Nov-4 Dec."
+    },
+    {
+      "id": "steam-winter-sale",
+      "series": "steam-winter",
+      "name": "Steam Winter Sale",
+      "brand": "Steam",
+      "category": "sale",
+      "rule": { "month": 12, "day": 18, "spanDays": 19, "precision": "week" },
+      "url": "https://store.steampowered.com/",
+      "note": "The most predictable date on this list: ~18 Dec to 5 Jan, every year."
+    },
+    {
+      "id": "steam-next-fest",
+      "series": "steam-next-fest",
+      "name": "Steam Next Fest (demos)",
+      "brand": "Steam",
+      "category": "gaming",
+      "rule": { "months": [2, 6, 10], "spanDays": 7, "precision": "month" },
+      "url": "https://store.steampowered.com/sale/nextfest",
+      "note": "A week of free demos, three times a year. Not a sale - but it is where next year's wishlist comes from."
+    },
+
+    {
+      "id": "playstation-days-of-play",
+      "series": "psn-days-of-play",
+      "name": "PlayStation Days of Play",
+      "brand": "PlayStation",
+      "category": "sale",
+      "rule": { "month": 5, "week": -1, "weekday": 3, "spanDays": 15, "precision": "week" },
+      "url": "https://store.playstation.com/",
+      "note": "Sony's own two-week sale, late May into June. Hardware and PS Plus are discounted too."
+    },
+    {
+      "id": "playstation-black-friday",
+      "series": "psn-black-friday",
+      "name": "PlayStation Store Black Friday Sale",
+      "brand": "PlayStation",
+      "category": "sale",
+      "rule": { "month": 11, "day": 20, "spanDays": 14, "precision": "week" },
+      "url": "https://store.playstation.com/",
+      "note": "Runs from the week before Black Friday into early December."
+    },
+    {
+      "id": "playstation-holiday-sale",
+      "series": "psn-holiday",
+      "name": "PlayStation Store Holiday Sale",
+      "brand": "PlayStation",
+      "category": "sale",
+      "rule": { "month": 12, "day": 17, "spanDays": 20, "precision": "week" },
+      "url": "https://store.playstation.com/",
+      "note": "The end-of-year sale, usually stacked with Double Discounts in January."
+    },
+
+    {
+      "id": "xbox-spring-sale",
+      "series": "xbox-spring",
+      "name": "Xbox Spring Sale",
+      "brand": "Xbox",
+      "category": "sale",
+      "rule": { "month": 4, "spanDays": 8, "precision": "month" },
+      "url": "https://www.xbox.com/en-US/games/store/deals",
+      "note": "A week of deals in April, usually announced on Xbox Wire days ahead."
+    },
+    {
+      "id": "xbox-ultimate-game-sale",
+      "series": "xbox-ultimate-game-sale",
+      "name": "Xbox Ultimate Game Sale",
+      "brand": "Xbox",
+      "category": "sale",
+      "rule": { "month": 7, "spanDays": 12, "precision": "month" },
+      "url": "https://www.xbox.com/en-US/games/store/deals",
+      "note": "Xbox's summer sale, mid-July. The deepest first-party cuts of the year outside December."
+    },
+    {
+      "id": "xbox-black-friday",
+      "series": "xbox-black-friday",
+      "name": "Xbox Black Friday Sale",
+      "brand": "Xbox",
+      "category": "sale",
+      "rule": { "month": 11, "day": 20, "spanDays": 12, "precision": "week" },
+      "url": "https://www.xbox.com/en-US/games/store/deals",
+      "note": "Game Pass itself is often discounted for new members here."
+    },
+    {
+      "id": "xbox-countdown-sale",
+      "series": "xbox-countdown",
+      "name": "Xbox Countdown Sale (New Year)",
+      "brand": "Xbox",
+      "category": "sale",
+      "rule": { "month": 12, "day": 17, "spanDays": 20, "precision": "week" },
+      "url": "https://www.xbox.com/en-US/games/store/deals",
+      "note": "Xbox's biggest sale, running to the first days of January with daily rotating deals."
+    },
+
+    {
+      "id": "nintendo-mar10-sale",
+      "series": "eshop-mar10",
+      "name": "Nintendo eShop MAR10 Day Sale",
+      "brand": "Nintendo",
+      "category": "sale",
+      "rule": { "month": 3, "day": 10, "spanDays": 7, "precision": "day" },
+      "url": "https://www.nintendo.com/us/store/sales-and-deals/",
+      "note": "10 March, every year - Mario games discounted, which Nintendo almost never does otherwise."
+    },
+    {
+      "id": "nintendo-summer-sale",
+      "series": "eshop-summer",
+      "name": "Nintendo eShop Summer Sale",
+      "brand": "Nintendo",
+      "category": "sale",
+      "rule": { "month": 7, "spanDays": 14, "precision": "month" },
+      "url": "https://www.nintendo.com/us/store/sales-and-deals/",
+      "note": "Mid-year eShop sale. Nintendo announces these with little warning."
+    },
+    {
+      "id": "nintendo-cyber-deals",
+      "series": "eshop-cyber-deals",
+      "name": "Nintendo eShop Cyber Deals",
+      "brand": "Nintendo",
+      "category": "sale",
+      "rule": { "month": 11, "day": 21, "spanDays": 14, "precision": "week" },
+      "url": "https://www.nintendo.com/us/store/sales-and-deals/",
+      "note": "Nintendo's Black Friday sale, around two weeks from late November."
+    },
+    {
+      "id": "nintendo-holiday-sale",
+      "series": "eshop-holiday",
+      "name": "Nintendo eShop Big Holiday Sale",
+      "brand": "Nintendo",
+      "category": "sale",
+      "rule": { "month": 12, "day": 16, "spanDays": 21, "precision": "week" },
+      "url": "https://www.nintendo.com/us/store/sales-and-deals/",
+      "note": "Runs into the first week of January. Usually the year's best eShop prices."
+    },
+
+    {
+      "id": "gog-spring-sale",
+      "series": "gog-spring",
+      "name": "GOG Spring Sale",
+      "brand": "GOG",
+      "category": "sale",
+      "rule": { "month": 3, "spanDays": 14, "precision": "month" },
+      "url": "https://www.gog.com/",
+      "note": "DRM-free, and GOG usually hands out a free game with it."
+    },
+    {
+      "id": "gog-summer-sale",
+      "series": "gog-summer",
+      "name": "GOG Summer Sale",
+      "brand": "GOG",
+      "category": "sale",
+      "rule": { "month": 6, "day": 12, "spanDays": 21, "precision": "week" },
+      "url": "https://www.gog.com/",
+      "note": "Three weeks from mid-June, overlapping Steam's. Watch for the free-game giveaway."
+    },
+    {
+      "id": "gog-black-friday",
+      "series": "gog-black-friday",
+      "name": "GOG Black Friday Sale",
+      "brand": "GOG",
+      "category": "sale",
+      "rule": { "month": 11, "day": 20, "spanDays": 12, "precision": "week" },
+      "url": "https://www.gog.com/",
+      "note": "Deep cuts on the back catalogue - the classics are cheapest here."
+    },
+    {
+      "id": "gog-winter-sale",
+      "series": "gog-winter",
+      "name": "GOG Big Winter Sale",
+      "brand": "GOG",
+      "category": "sale",
+      "rule": { "month": 12, "day": 12, "spanDays": 26, "precision": "week" },
+      "url": "https://www.gog.com/",
+      "note": "Starts earlier than Steam's and runs to early January, with daily giveaways."
+    },
+
+    {
+      "id": "epic-mega-sale",
+      "series": "epic-mega",
+      "name": "Epic Mega Sale",
+      "brand": "Epic Games Store",
+      "category": "sale",
+      "rule": { "month": 5, "spanDays": 21, "precision": "month" },
+      "url": "https://store.epicgames.com/",
+      "note": "Epic's flagship sale, with store coupons that stack on the discount."
+    },
+    {
+      "id": "epic-summer-sale",
+      "series": "epic-summer",
+      "name": "Epic Summer Sale",
+      "brand": "Epic Games Store",
+      "category": "sale",
+      "rule": { "month": 6, "day": 12, "spanDays": 21, "precision": "week" },
+      "url": "https://store.epicgames.com/",
+      "note": "Mid-June into July. Coupons return, and the weekly free game keeps running."
+    },
+    {
+      "id": "epic-black-friday",
+      "series": "epic-black-friday",
+      "name": "Epic Black Friday Sale",
+      "brand": "Epic Games Store",
+      "category": "sale",
+      "rule": { "month": 11, "day": 20, "spanDays": 12, "precision": "week" },
+      "url": "https://store.epicgames.com/",
+      "note": "Shorter than the others, but the coupon stacking makes up for it."
+    },
+    {
+      "id": "epic-holiday-sale",
+      "series": "epic-holiday",
+      "name": "Epic Holiday Sale (+ free game a day)",
+      "brand": "Epic Games Store",
+      "category": "sale",
+      "rule": { "month": 12, "day": 18, "spanDays": 22, "precision": "week" },
+      "url": "https://store.epicgames.com/free-games",
+      "note": "The one with a free game EVERY DAY for ~15 days. The daily giveaways show up in the main digest as they unlock."
+    },
+
+    {
+      "id": "nintendo-direct",
+      "series": "nintendo-direct",
+      "name": "Nintendo Direct",
+      "brand": "Nintendo",
+      "category": "gaming",
+      "rule": { "months": [2, 6, 9], "precision": "month" },
+      "url": "https://www.nintendo.com/nintendo-direct/",
+      "note": "General Directs land Feb / Jun / Sep, announced only 1-2 days ahead."
+    },
+    {
+      "id": "nintendo-partner-showcase",
+      "series": "nintendo-partner",
+      "name": "Nintendo Partner / Indie World Showcase",
+      "brand": "Nintendo",
+      "category": "gaming",
+      "rule": { "months": [4, 8], "precision": "month" },
+      "url": "https://www.nintendo.com/nintendo-direct/"
+    },
+    {
+      "id": "state-of-play",
+      "series": "state-of-play",
+      "name": "PlayStation State of Play",
+      "brand": "PlayStation",
+      "category": "gaming",
+      "rule": { "months": [2, 6, 9], "precision": "month" },
+      "url": "https://blog.playstation.com/",
+      "note": "Sony announces these ~2 days out on the PlayStation Blog."
+    },
+    {
+      "id": "xbox-games-showcase",
+      "series": "xbox-showcase",
+      "name": "Xbox Games Showcase",
+      "brand": "Xbox",
+      "category": "gaming",
+      "rule": { "month": 6, "precision": "month" },
+      "url": "https://news.xbox.com/",
+      "note": "The big one, every June alongside Summer Game Fest."
+    },
+    {
+      "id": "xbox-developer-direct",
+      "series": "xbox-developer-direct",
+      "name": "Xbox Developer_Direct",
+      "brand": "Xbox",
+      "category": "gaming",
+      "rule": { "month": 1, "precision": "month" },
+      "url": "https://news.xbox.com/"
+    },
+    {
+      "id": "summer-game-fest",
+      "series": "summer-game-fest",
+      "name": "Summer Game Fest",
+      "brand": "Geoff Keighley",
+      "category": "gaming",
+      "rule": { "month": 6, "week": 1, "weekday": 5, "precision": "week" },
+      "url": "https://www.summergamefest.com/"
+    },
+    {
+      "id": "the-game-awards",
+      "series": "the-game-awards",
+      "name": "The Game Awards",
+      "brand": "Geoff Keighley",
+      "category": "gaming",
+      "rule": { "month": 12, "week": 2, "weekday": 4, "precision": "day" },
+      "url": "https://thegameawards.com/",
+      "note": "Second Thursday of December, and reliably full of reveals."
+    },
+    {
+      "id": "gamescom-onl",
+      "series": "gamescom",
+      "name": "gamescom · Opening Night Live",
+      "brand": "gamescom",
+      "category": "gaming",
+      "rule": { "month": 8, "week": 3, "weekday": 2, "spanDays": 5, "precision": "week" },
+      "url": "https://www.gamescom.global/en"
+    },
+    {
+      "id": "ubisoft-forward",
+      "series": "ubisoft-forward",
+      "name": "Ubisoft Forward",
+      "brand": "Ubisoft",
+      "category": "gaming",
+      "rule": { "month": 6, "precision": "month" },
+      "url": "https://www.ubisoft.com/"
+    },
+    {
+      "id": "gdc",
+      "series": "gdc",
+      "name": "Game Developers Conference",
+      "brand": "GDC",
+      "category": "gaming",
+      "rule": { "month": 3, "week": 3, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://gdconf.com/"
+    },
+
+    {
+      "id": "apple-september-event",
+      "series": "apple-september",
+      "name": "Apple September Event (iPhone)",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 9, "week": 2, "weekday": 2, "precision": "day" },
+      "url": "https://www.apple.com/apple-events/",
+      "note": "iPhone + Watch. Apple confirms it ~2 weeks out by press release."
+    },
+    {
+      "id": "apple-wwdc",
+      "series": "apple-wwdc",
+      "name": "Apple WWDC Keynote",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 6, "week": 2, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://developer.apple.com/wwdc/"
+    },
+    {
+      "id": "apple-october-event",
+      "series": "apple-october",
+      "name": "Apple October Event (Mac / iPad)",
+      "brand": "Apple",
+      "category": "tech",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://www.apple.com/apple-events/",
+      "note": "Not every year - Apple sometimes ships Macs by press release instead."
+    },
+    {
+      "id": "samsung-unpacked-flagship",
+      "series": "samsung-unpacked-s",
+      "name": "Samsung Galaxy Unpacked (S series)",
+      "brand": "Samsung",
+      "category": "mobile",
+      "rule": { "month": 1, "precision": "month" },
+      "url": "https://news.samsung.com/global/"
+    },
+    {
+      "id": "samsung-unpacked-fold",
+      "series": "samsung-unpacked-fold",
+      "name": "Samsung Galaxy Unpacked (Fold / Flip)",
+      "brand": "Samsung",
+      "category": "mobile",
+      "rule": { "month": 7, "precision": "month" },
+      "url": "https://news.samsung.com/global/"
+    },
+    {
+      "id": "xiaomi-mwc-launch",
+      "series": "xiaomi-global",
+      "name": "Xiaomi Global Launch (MWC)",
+      "brand": "Xiaomi",
+      "category": "mobile",
+      "rule": { "month": 3, "precision": "month" },
+      "url": "https://www.mi.com/global/",
+      "note": "Global flagship launch, timed to MWC Barcelona."
+    },
+    {
+      "id": "xiaomi-china-flagship",
+      "series": "xiaomi-china",
+      "name": "Xiaomi Flagship Launch (China)",
+      "brand": "Xiaomi",
+      "category": "mobile",
+      "rule": { "months": [2, 10], "precision": "month" },
+      "url": "https://www.mi.com/global/",
+      "note": "The China-first flagship + HyperOS reveal, months before global."
+    },
+    {
+      "id": "google-pixel-event",
+      "series": "google-pixel",
+      "name": "Made by Google (Pixel)",
+      "brand": "Google",
+      "category": "mobile",
+      "rule": { "month": 8, "precision": "month" },
+      "url": "https://blog.google/products/pixel/"
+    },
+    {
+      "id": "google-io",
+      "series": "google-io",
+      "name": "Google I/O",
+      "brand": "Google",
+      "category": "ai",
+      "rule": { "month": 5, "week": 2, "weekday": 2, "spanDays": 2, "precision": "week" },
+      "url": "https://io.google/"
+    },
+    {
+      "id": "ces",
+      "series": "ces",
+      "name": "CES",
+      "brand": "CTA",
+      "category": "tech",
+      "rule": { "month": 1, "day": 6, "spanDays": 4, "precision": "week" },
+      "url": "https://www.ces.tech/",
+      "note": "Las Vegas. Nvidia / AMD / Sony keynotes cluster on the eve."
+    },
+    {
+      "id": "mwc-barcelona",
+      "series": "mwc",
+      "name": "MWC Barcelona",
+      "brand": "GSMA",
+      "category": "mobile",
+      "rule": { "month": 3, "week": 1, "weekday": 1, "spanDays": 4, "precision": "week" },
+      "url": "https://www.mwcbarcelona.com/"
+    },
+    {
+      "id": "computex",
+      "series": "computex",
+      "name": "Computex Taipei",
+      "brand": "TAITRA",
+      "category": "tech",
+      "rule": { "month": 5, "week": -1, "weekday": 2, "spanDays": 4, "precision": "week" },
+      "url": "https://www.computextaipei.com.tw/"
+    },
+    {
+      "id": "ifa-berlin",
+      "series": "ifa",
+      "name": "IFA Berlin",
+      "brand": "IFA",
+      "category": "tech",
+      "rule": { "month": 9, "week": 1, "weekday": 5, "spanDays": 5, "precision": "week" },
+      "url": "https://www.ifa-berlin.com/"
+    },
+    {
+      "id": "snapdragon-summit",
+      "series": "snapdragon-summit",
+      "name": "Snapdragon Summit",
+      "brand": "Qualcomm",
+      "category": "mobile",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://www.qualcomm.com/snapdragon/summit",
+      "note": "The chip that lands in next year's Android flagships."
+    },
+
+    {
+      "id": "openai-devday",
+      "series": "openai-devday",
+      "name": "OpenAI DevDay",
+      "brand": "OpenAI",
+      "category": "ai",
+      "rule": { "month": 10, "precision": "month" },
+      "url": "https://openai.com/devday/"
+    },
+    {
+      "id": "nvidia-gtc",
+      "series": "nvidia-gtc",
+      "name": "Nvidia GTC",
+      "brand": "Nvidia",
+      "category": "ai",
+      "rule": { "month": 3, "week": 3, "weekday": 1, "spanDays": 4, "precision": "week" },
+      "url": "https://www.nvidia.com/gtc/",
+      "note": "Jensen's keynote is where the next AI accelerator gets announced."
+    },
+    {
+      "id": "microsoft-build",
+      "series": "microsoft-build",
+      "name": "Microsoft Build",
+      "brand": "Microsoft",
+      "category": "ai",
+      "rule": { "month": 5, "week": 3, "weekday": 2, "spanDays": 3, "precision": "week" },
+      "url": "https://build.microsoft.com/"
+    },
+    {
+      "id": "google-cloud-next",
+      "series": "google-cloud-next",
+      "name": "Google Cloud Next",
+      "brand": "Google",
+      "category": "ai",
+      "rule": { "month": 4, "precision": "month" },
+      "url": "https://cloud.withgoogle.com/next"
+    },
+    {
+      "id": "meta-connect",
+      "series": "meta-connect",
+      "name": "Meta Connect",
+      "brand": "Meta",
+      "category": "ai",
+      "rule": { "month": 9, "week": 4, "weekday": 3, "spanDays": 2, "precision": "week" },
+      "url": "https://www.meta.com/connect/"
+    },
+    {
+      "id": "aws-reinvent",
+      "series": "aws-reinvent",
+      "name": "AWS re:Invent",
+      "brand": "AWS",
+      "category": "ai",
+      "rule": { "month": 12, "week": 1, "weekday": 1, "spanDays": 5, "precision": "week" },
+      "url": "https://reinvent.awsevents.com/"
+    }
+  ]
+}
